@@ -1,0 +1,3 @@
+@openzeppelin/=lib/openzeppelin-contracts/
+solady/=lib/solady
+permit2-relay/=lib/permit2-relay
