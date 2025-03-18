@@ -1,40 +1,30 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
 import {Test} from "forge-std/Test.sol";
-import {EIP712} from "solady/src/utils/EIP712.sol";
-import {Permit2} from "permit2-relay/src/Permit2.sol";
-import {ISignatureTransfer} from "permit2-relay/src/interfaces/ISignatureTransfer.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {BaseRelayTest} from "./base/BaseRelayTest.sol";
-import {Multicall3} from "../src/v2/utils/Multicall3.sol";
-import {CreditMaster} from "../src/v2/CreditMaster.sol";
-import {ApprovalProxy} from "../src/v2/ApprovalProxy.sol";
-import {RelayRouter} from "../src/v2/RelayRouter.sol";
-import {Call3Value, CallRequest, Result} from "../src/v2/utils/RelayStructs.sol";
+import {EIP712} from "solady/utils/EIP712.sol";
 
-contract CreditMasterTest is Test, BaseRelayTest, EIP712 {
-    event Deposit(address from, address token, uint256 value, bytes32 id);
-    event CallExecuted(bytes32 digest, address target, bool success);
-    error InvalidSignature();
-    error Unauthorized();
+import {BaseTest} from "./BaseTest.t.sol";
+import {Call, CallRequest, CallResult} from "../src/utils/RelayEscrowStructs.sol";
 
-    CreditMaster cm;
-    RelayRouter router;
-    ApprovalProxy approvalProxy;
+contract RelayEscrowTest is BaseTest, EIP712 {
+    RelayEscrow relayEscrow;
 
     Account allocator = makeAccountAndDeal("allocator", 1 ether);
 
-    /// @notice The EIP-712 typehash for the Call3Value struct
-    bytes32 public constant _CALL3VALUE_TYPEHASH =
-        keccak256(
-            "Call3Value(address target,bool allowFailure,uint256 value,bytes callData)"
-        );
+    // Directly copied from `RelayEscrow`
 
-    /// @notice The EIP-712 typehash for the CallRequest struct
+    event NativeDeposit(address from, uint256 amount, bytes32 id);
+    event Erc20Deposit(address from, address token, uint256 amount, bytes32 id);
+    event CallRequestExecuted(bytes32 id, Call[] calls, CallResult[] results);
+
+    bytes32 public constant _CALL_TYPEHASH =
+        keccak256(
+            "Call(address to,bytes data,uint256 value,bool allowFailure)"
+        );
     bytes32 public constant _CALL_REQUEST_TYPEHASH =
         keccak256(
-            "CallRequest(Call3Value[] call3Values,uint256 nonce)Call3Value(address target,bool allowFailure,uint256 value,bytes callData)"
+            "CallRequest(Call[] calls,uint256 nonce,uint256 expiration)Call(address to,bytes data,uint256 value,bool allowFailure)"
         );
 
     bytes32 public constant DOMAIN_SEPARATOR =
@@ -43,13 +33,7 @@ contract CreditMasterTest is Test, BaseRelayTest, EIP712 {
     function setUp() public override {
         super.setUp();
 
-        router = new RelayRouter();
-        cm = new CreditMaster(allocator.addr);
-        approvalProxy = new ApprovalProxy(
-            address(this),
-            address(router),
-            PERMIT2
-        );
+        relayEscrow = new RelayEscrow(allocator.addr);
     }
 
     function testDepositEth(uint256 amount) public {
@@ -81,65 +65,6 @@ contract CreditMasterTest is Test, BaseRelayTest, EIP712 {
             amount,
             bytes32(uint256(1))
         );
-    }
-
-    function testDepositErc20__ApprovalProxy(uint96 amount) public {
-        erc20_1.mint(alice.addr, amount);
-
-        bytes memory calldata0 = abi.encodeWithSelector(
-            erc20_1.approve.selector,
-            address(cm),
-            amount
-        );
-
-        bytes memory calldata1 = abi.encodeWithSelector(
-            cm.depositErc20.selector,
-            alice.addr,
-            address(erc20_1),
-            amount,
-            bytes32("test")
-        );
-
-        Call3Value[] memory calls = new Call3Value[](2);
-        calls[0] = Call3Value({
-            target: address(erc20_1),
-            allowFailure: false,
-            value: 0,
-            callData: calldata0
-        });
-        calls[1] = Call3Value({
-            target: address(cm),
-            allowFailure: false,
-            value: 0,
-            callData: calldata1
-        });
-
-        address[] memory tokens = new address[](1);
-        tokens[0] = address(erc20_1);
-
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = amount;
-
-        vm.startPrank(alice.addr);
-
-        // Alice approves AP to pull tokens
-        IERC20(address(erc20_1)).approve(address(approvalProxy), amount);
-
-        vm.expectEmit(true, true, true, true, address(cm));
-        emit Deposit(alice.addr, address(erc20_1), amount, bytes32("test"));
-
-        // Alice transfers ERC20s to ApprovalProxy
-        // ApprovalProxy transfers tokens to RelayRouter
-        // RelayRouter calls `depositErc20` on CreditManager to deposit on behalf of Alice
-        approvalProxy.transferAndMulticall(
-            tokens,
-            amounts,
-            calls,
-            alice.addr,
-            address(0)
-        );
-
-        assertEq(amount, erc20_1.balanceOf(address(cm)));
     }
 
     function testSetAllocator() public {
