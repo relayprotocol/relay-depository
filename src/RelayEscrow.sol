@@ -36,7 +36,7 @@ contract RelayEscrow is Ownable, EIP712 {
     event Erc20Deposit(address from, address token, uint256 amount, bytes32 id);
 
     /// @notice Emit event when a call is executed
-    event CallRequestExecuted(bytes32 id, Call[] calls, CallResult[] results);
+    event CallExecuted(bytes32 id, Call call);
 
     /// @notice The EIP-712 typehash for the Call struct
     bytes32 public constant _CALL_TYPEHASH =
@@ -133,16 +133,15 @@ contract RelayEscrow is Ownable, EIP712 {
         callRequests[id] = true;
 
         // Execute the calls
-        results = _executeCalls(request.calls);
-
-        // Emit the CallRequestExecuted event
-        emit CallRequestExecuted(id, request.calls, results);
+        results = _executeCalls(id, request.calls);
     }
 
     /// @notice Execute a list of calls
+    /// @param id The id of the call request
     /// @param calls The calls to execute
     /// @return returnData The results of the calls
     function _executeCalls(
+        bytes32 id,
         Call[] calldata calls
     ) internal returns (CallResult[] memory returnData) {
         unchecked {
@@ -170,6 +169,11 @@ contract RelayEscrow is Ownable, EIP712 {
                     success: success,
                     returnData: data
                 });
+
+                // Emit the CallExecuted event if the call was successful
+                if (success) {
+                    emit CallExecuted(id, c);
+                }
             }
         }
     }
