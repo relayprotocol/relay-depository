@@ -137,7 +137,12 @@ pub mod relay_escrow {
         );
 
         // Validate allocator signature
-        let signature_ix = sysvar::instructions::load_instruction_at_checked(0, &ctx.accounts.ix_sysvar)?;
+        let cur_index:usize = sysvar::instructions::load_current_index_checked(&ctx.accounts.ix_sysvar)?.into();
+        assert!(cur_index > 0, "cur_index should be greater than 0");
+
+        let ed25519_instr_index = cur_index - 1;
+        let signature_ix = sysvar::instructions::load_instruction_at_checked(ed25519_instr_index, &ctx.accounts.ix_sysvar)?;
+        
         validate_ed25519_signature_instruction(
             &signature_ix,
             &relay_escrow.allocator,
