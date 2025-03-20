@@ -295,7 +295,7 @@ describe("Relay Escrow", () => {
   });
 
   it("Execute transfer with allocator signature", async () => {
-    const transferAmount = LAMPORTS_PER_SOL / 2; // 0.5 SOL
+    const transferAmount = LAMPORTS_PER_SOL / 10; // 0.1 SOL
     
     // Create transfer request
     const request = {
@@ -604,6 +604,259 @@ describe("Relay Escrow", () => {
       assert.include(e.message, "already in use");
       assert.include(e.message, requestPDA.toBase58());
     }
+  });
+
+  it("Execute multiple transfers in single transaction", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 10; // 0.25 SOL each
+    
+    // Create two transfer requests
+    const request1 = {
+      recipient: recipient.publicKey,
+      token: null, // SOL transfer
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor((Date.now() / 1000)) + 300)
+    };
+
+    const request2 = {
+      recipient: recipient.publicKey,
+      token: mintPubkey, // Token transfer
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor((Date.now() / 1000)) + 300)
+    };
+
+    // Encode messages and create signatures
+    const message1 = program.coder.types.encode('TransferRequest', request1);
+    const message2 = program.coder.types.encode('TransferRequest', request2);
+    
+    const signature1 = nacl.sign.detached(message1, allocator.secretKey);
+    const signature2 = nacl.sign.detached(message2, allocator.secretKey);
+
+    // Get PDAs
+    const requestPDA1 = await getUsedRequestPDA(request1);
+    const requestPDA2 = await getUsedRequestPDA(request2);
+
+    // Get initial balances
+    const recipientSOLBefore = await provider.connection.getBalance(recipient.publicKey);
+    const vaultSOLBefore = await provider.connection.getBalance(vaultPDA);
+    const recipientTokenBefore = await provider.connection.getTokenAccountBalance(recipientTokenAccount);
+    const vaultTokenBefore = await provider.connection.getTokenAccountBalance(vaultTokenAccount);
+
+    // Create transaction with multiple instructions
+    const tx = new anchor.web3.Transaction();
+
+    // Add first transfer (SOL)
+    tx.add(
+      anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+        publicKey: allocator.publicKey.toBytes(),
+        message: message1,
+        signature: signature1,
+      })
+    );
+
+    tx.add(
+      await program.methods
+        .executeTransfer(request1)
+        .accounts({
+          mint: null,
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayEscrow: relayEscrowPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA1,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .instruction()
+    );
+
+    // Add second transfer (Token)
+    tx.add(
+      anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+        publicKey: allocator.publicKey.toBytes(),
+        message: message2,
+        signature: signature2,
+      })
+    );
+
+    tx.add(
+      await program.methods
+        .executeTransfer(request2)
+        .accounts({
+          mint: mintPubkey,
+          vaultTokenAccount,
+          recipientTokenAccount,
+          relayEscrow: relayEscrowPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA2,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .instruction()
+    );
+
+    // Send transaction
+    await provider.sendAndConfirm(tx);
+
+    // Verify execution
+    const usedRequestState1 = await program.account.usedRequest.fetch(requestPDA1);
+    const usedRequestState2 = await program.account.usedRequest.fetch(requestPDA2);
+
+    assert.equal(usedRequestState1.isUsed, true, "First request should be marked as used");
+    assert.equal(usedRequestState2.isUsed, true, "Second request should be marked as used");
+
+    // Verify balances
+    const recipientSOLAfter = await provider.connection.getBalance(recipient.publicKey);
+    const vaultSOLAfter = await provider.connection.getBalance(vaultPDA);
+    const recipientTokenAfter = await provider.connection.getTokenAccountBalance(recipientTokenAccount);
+    const vaultTokenAfter = await provider.connection.getTokenAccountBalance(vaultTokenAccount);
+
+    // Verify SOL transfer
+    assert.equal(
+      recipientSOLAfter - recipientSOLBefore,
+      transferAmount,
+      "Incorrect SOL transfer amount"
+    );
+    assert.equal(
+      vaultSOLBefore - vaultSOLAfter,
+      transferAmount,
+      "Incorrect SOL deduction from vault"
+    );
+
+    // Verify Token transfer
+    assert.equal(
+      Number(recipientTokenAfter.value.amount) - Number(recipientTokenBefore.value.amount),
+      transferAmount,
+      "Incorrect token transfer amount"
+    );
+    assert.equal(
+      Number(vaultTokenBefore.value.amount) - Number(vaultTokenAfter.value.amount),
+      transferAmount,
+      "Incorrect token deduction from vault"
+    );
+  });
+
+  it("Should fail batch transfer if one signature is invalid", async () => {
+      const transferAmount = LAMPORTS_PER_SOL / 10;
+      
+      // Create two transfer requests
+      const request1 = {
+        recipient: recipient.publicKey,
+        token: null,
+        amount: new anchor.BN(transferAmount),
+        nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+        expiration: new anchor.BN(Math.floor((Date.now() / 1000)) + 300)
+      };
+
+      const request2 = {
+        recipient: recipient.publicKey,
+        token: null,
+        amount: new anchor.BN(transferAmount),
+        nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+        expiration: new anchor.BN(Math.floor((Date.now() / 1000)) + 300)
+      };
+
+      const message1 = program.coder.types.encode('TransferRequest', request1);
+      const message2 = program.coder.types.encode('TransferRequest', request2);
+      
+      const signature1 = nacl.sign.detached(message1, allocator.secretKey);
+      // Use wrong signer for second signature
+      const fakeAllocator = Keypair.generate();
+      const signature2 = nacl.sign.detached(message2, fakeAllocator.secretKey);
+
+      const requestPDA1 = await getUsedRequestPDA(request1);
+      const requestPDA2 = await getUsedRequestPDA(request2);
+
+      const tx = new anchor.web3.Transaction();
+
+      // Add first transfer
+      tx.add(
+        anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+          publicKey: allocator.publicKey.toBytes(),
+          message: message1,
+          signature: signature1,
+        })
+      );
+
+      tx.add(
+        await program.methods
+          .executeTransfer(request1)
+          .accounts({
+            mint: null,
+            vaultTokenAccount: null,
+            recipientTokenAccount: null,
+            relayEscrow: relayEscrowPDA,
+            executor: provider.wallet.publicKey,
+            recipient: recipient.publicKey,
+            vault: vaultPDA,
+            usedRequest: requestPDA1,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+          })
+          .instruction()
+      );
+
+      // Add second transfer with invalid signature
+      tx.add(
+        anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+          publicKey: fakeAllocator.publicKey.toBytes(),
+          message: message2,
+          signature: signature2,
+        })
+      );
+
+      tx.add(
+        await program.methods
+          .executeTransfer(request2)
+          .accounts({
+            mint: null,
+            vaultTokenAccount: null,
+            recipientTokenAccount: null,
+            relayEscrow: relayEscrowPDA,
+            executor: provider.wallet.publicKey,
+            recipient: recipient.publicKey,
+            vault: vaultPDA,
+            usedRequest: requestPDA2,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+          })
+          .instruction()
+      );
+
+      try {
+        await provider.sendAndConfirm(tx);
+        assert.fail("Should fail due to invalid signature");
+      } catch (e) {
+        assert.include(e.message, "AllocatorSignerMismatch");
+        
+        // Verify neither transfer was executed
+        try {
+          await program.account.usedRequest.fetch(requestPDA1);
+          assert.fail("First request should not exist");
+        } catch (e) {
+          assert.include(e.message, "Account does not exist");
+        }
+
+        try {
+          await program.account.usedRequest.fetch(requestPDA2);
+          assert.fail("Second request should not exist");
+        } catch (e) {
+          assert.include(e.message, "Account does not exist");
+        }
+      }
   });
 
   const getUsedRequestPDA = async (request) => {
