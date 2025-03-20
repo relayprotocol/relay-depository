@@ -1,0 +1,1 @@
+/Users/fun/projects/reservoir/relay-protocol-contracts/packages/svm/target/sbf-solana-solana/release/credit_master.so: /Users/fun/projects/reservoir/relay-protocol-contracts/packages/svm/programs/relay-escrow/src/lib.rs
