@@ -63,7 +63,6 @@ module relay_escrow::escrow {
 
     public struct TransferExecutedEvent has copy, drop {
         request_hash: vector<u8>,
-        request_bytes: vector<u8>,
         recipient: address,
         amount: u64,
         coin_type: TypeName,
@@ -223,7 +222,6 @@ module relay_escrow::escrow {
 
         // Get request hash
         let request_hash = hash_request(&request);
-        let request_bytes = bcs::to_bytes(&request);
 
         // Make sure allocator_pubkey is configured
         assert!(vector::length(&escrow.allocator_pubkey) > 0, EInvalidPublicKey);
@@ -247,7 +245,6 @@ module relay_escrow::escrow {
         // Emit transfer executed event
         sui::event::emit(TransferExecutedEvent {
             request_hash,
-            request_bytes,
             recipient,
             amount,
             coin_type,
