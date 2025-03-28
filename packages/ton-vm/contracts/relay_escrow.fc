@@ -1,0 +1,82 @@
+#include "imports/stdlib.fc";
+
+const op::set_allocator = "op::set_allocator"c;
+
+;; storage variables
+global slice owner;
+global slice allocator;
+
+;; Errors
+const int error::not_owner = 101;
+
+;; load_data populates storage variables using stored data
+() load_data() impure {
+    var ds = get_data().begin_parse();
+
+    owner = ds~load_msg_addr(); ;; owner
+    allocator = ds~load_msg_addr(); ;; allocator
+
+    ds.end_parse();
+}
+
+;; save_data stores storage variables as a cell into persistent storage
+() save_data() impure {
+    set_data(
+        begin_cell()
+            .store_slice(owner)
+            .store_slice(allocator)
+            .end_cell()
+    );
+}
+
+;; recv_internal is the main function of the contract and is called when it receives a message from other contracts
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) { ;; Accept incoming TON
+        return ();
+    }
+
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+    if (flags & 1) { ;; ignore all bounced messages
+        return ();
+    }
+
+    load_data(); ;; here we populate the storage variables
+
+    int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
+    int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
+   
+    slice sender = cs~load_msg_addr();
+
+    if (op == op::set_allocator) {
+        throw_unless(error::not_owner, equal_slices_bits(sender, owner));
+        allocator = in_msg_body~load_msg_addr();
+        save_data();
+        return ();
+    }
+
+    ;; Handle incoming Jetton transfer notification
+    if (op == 0x7362d09c) { ;; jetton_notification
+        ;; Process Jetton notification
+        ;; slice from = in_msg_body~load_msg_addr();
+        ;; int amount = in_msg_body~load_coins();
+        ;; Additional processing if needed
+        return ();
+    }
+
+    throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
+}
+
+;; get methods are a means to conveniently read contract data using, for example, HTTP APIs
+;; they are marked with method_id
+;; note that unlike in many other smart contract VMs, get methods cannot be called by other contracts
+
+slice get_owner() method_id {
+    load_data();
+    return owner;
+}
+
+slice get_allocator() method_id {
+    load_data();
+    return allocator;
+}
