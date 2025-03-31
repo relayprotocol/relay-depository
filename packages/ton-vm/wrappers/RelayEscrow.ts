@@ -11,7 +11,6 @@ export function relayEscrowConfigToCell(config: RelayEscrowConfig): Cell {
 
 export const Opcodes = {
     setAllocator: 0xebfa1273,
-
 };
 
 export class RelayEscrow implements Contract {
