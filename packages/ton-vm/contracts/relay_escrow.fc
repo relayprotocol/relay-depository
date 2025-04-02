@@ -1,13 +1,29 @@
 #include "imports/stdlib.fc";
 
+;; Constants for signature verification
+const int SIGNATURE_LENGTH = 512;  
+const int PUBLIC_KEY_LENGTH = 256;
+
 const op::set_allocator = "op::set_allocator"c;
+const op::transfers = "op::transfers"c;
+
+;; Currency types
+const int CURRENCY_TON = 0;
+const int CURRENCY_JETTON = 1;
 
 ;; storage variables
 global slice owner;
 global slice allocator;
+global int nonce;
 
 ;; Errors
 const int error::not_owner = 101;
+const int error::invalid_signature = 102;
+const int error::expired = 103;
+const int error::invalid_nonce = 104;
+const int error::insufficient_funds = 105;
+const int error::invalid_currency_type = 106;
+const int error::empty_actions = 107;
 
 ;; load_data populates storage variables using stored data
 () load_data() impure {
@@ -15,6 +31,7 @@ const int error::not_owner = 101;
 
     owner = ds~load_msg_addr(); ;; owner
     allocator = ds~load_msg_addr(); ;; allocator
+    nonce = ds~load_uint(64); ;; nonce
 
     ds.end_parse();
 }
@@ -25,8 +42,136 @@ const int error::not_owner = 101;
         begin_cell()
             .store_slice(owner)
             .store_slice(allocator)
+            .store_uint(nonce, 64)
             .end_cell()
     );
+}
+
+;; Check Transafer signature
+(int) check_transfer_signature(slice signature, cell msg_body) {
+    ;; Parse main data slice
+    slice ds = msg_body.begin_parse();
+    
+    ;; Load main transfer data
+    int msg_nonce = ds~load_uint(64);
+    int expiry = ds~load_uint(32);
+    int currency_type = ds~load_uint(8);
+    slice to_addr = ds~load_msg_addr();
+    slice currency_addr = ds~load_msg_addr();
+    int amount = ds~load_coins();
+    int forward_amount = ds~load_coins();
+    int gas_amount = ds~load_coins();
+    
+    ;; Load signature from reference cell
+    cell sig_cell = ds~load_ref();
+    slice sig_slice = sig_cell.begin_parse();
+    slice sig = sig_slice~load_bits(SIGNATURE_LENGTH);
+    
+    ;; Recreate message for signature verification
+    cell signing_message = begin_cell()
+        .store_uint(msg_nonce, 64)
+        .store_uint(expiry, 32)
+        .store_uint(currency_type, 8)
+        .store_slice(to_addr)
+        .store_slice(currency_addr)
+        .store_coins(amount)
+        .store_coins(forward_amount)
+        .store_coins(gas_amount)
+        .end_cell();
+    
+    (int wc, int pk_hash) = parse_std_addr(allocator);
+
+    return check_signature(
+        cell_hash(signing_message),
+        sig,
+        pk_hash
+    );
+}
+
+;; Transfer TON
+() send_tons(slice to, int amount, int mode) impure {
+    var msg = begin_cell()
+        .store_uint(0x10, 6) 
+        .store_slice(to)
+        .store_coins(amount)
+        .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+        .end_cell();
+    
+    send_raw_message(msg, mode);
+}
+
+;; Transfer Jetton
+() send_jetton(
+    slice to, 
+    slice jetton_wallet_addr, 
+    int amount, 
+    int forward_amount,
+    int gas_amount
+) impure {
+    slice my_address = my_address();
+
+    cell transfer_msg = begin_cell()
+        .store_uint(0xf8a7ea5, 32)    
+        .store_uint(0, 64)            
+        .store_coins(amount)          
+        .store_slice(to)              
+        .store_slice(my_address)    
+        .store_uint(0, 1)            
+        .store_coins(forward_amount) ;; for wallet deployment 
+        .store_uint(0, 1)            
+        .end_cell();
+
+    cell msg = begin_cell()
+        .store_uint(0x18, 6)          
+        .store_slice(jetton_wallet_addr)
+        .store_coins(gas_amount)        
+        .store_uint(1, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+        .store_ref(transfer_msg)
+        .end_cell();
+
+    send_raw_message(msg, 1);
+}
+
+() process_transfer(cell transfer_data, int my_balance) impure {
+    slice ds = transfer_data.begin_parse();
+    
+    ;; Get main data
+    int msg_nonce = ds~load_uint(64);
+    int expiry = ds~load_uint(32);
+    int currency_type = ds~load_uint(8);
+    slice to = ds~load_msg_addr();
+    slice my_jetton_wallet = ds~load_msg_addr();
+    int amount = ds~load_coins();
+    int forward_amount = ds~load_coins();
+    int gas_amount = ds~load_coins();
+
+    ;; Load signature from ref
+    cell sig_cell = ds~load_ref();
+    slice signature = sig_cell.begin_parse();
+
+    ;; Verify signature
+    throw_unless(error::invalid_signature, 
+        check_transfer_signature(signature, transfer_data)
+    );
+
+    ;; Check expiry
+    throw_if(error::expired, now() > expiry);
+
+    ;; Check nonce
+    ;; throw_if(error::invalid_nonce, msg_nonce <= nonce);
+    throw_unless(error::invalid_nonce, msg_nonce == nonce + 1);
+    nonce = msg_nonce;
+
+    ;; Process transfer based on type
+    if (currency_type == CURRENCY_TON) {
+        throw_if(error::insufficient_funds, amount > my_balance);
+        send_tons(to, amount, 1);
+        my_balance -= amount;
+    } elseif (currency_type == CURRENCY_JETTON) {
+        send_jetton(to, my_jetton_wallet, amount, forward_amount, gas_amount);
+    } else {
+        throw(error::invalid_currency_type);
+    }
 }
 
 ;; recv_internal is the main function of the contract and is called when it receives a message from other contracts
@@ -55,12 +200,30 @@ const int error::not_owner = 101;
         return ();
     }
 
-    ;; Handle incoming Jetton transfer notification
-    if (op == 0x7362d09c) { ;; jetton_notification
-        ;; Process Jetton notification
-        ;; slice from = in_msg_body~load_msg_addr();
-        ;; int amount = in_msg_body~load_coins();
-        ;; Additional processing if needed
+    ;; Multiple transfers in one transaction
+    if (op == op::transfers) {
+        cell actions = in_msg_body~load_ref();
+        slice as = actions.begin_parse();
+        
+        int n = as~load_uint(8);  ;; Number of transfers
+        throw_if(error::empty_actions, n == 0);
+        
+        int i = 0;
+        int current_balance = my_balance;
+        
+        ;; Process each transfer
+        while (i < n) {
+            cell transfer_data = as~load_ref();
+            process_transfer(transfer_data, current_balance);
+            save_data();
+            i += 1;
+        }
+        
+        return ();
+    }
+
+    ;; Handle incoming Jetton notification
+    if (op == 0x7362d09c) {
         return ();
     }
 
@@ -79,4 +242,9 @@ slice get_owner() method_id {
 slice get_allocator() method_id {
     load_data();
     return allocator;
+}
+
+int get_nonce() method_id {
+    load_data();
+    return nonce;
 }
