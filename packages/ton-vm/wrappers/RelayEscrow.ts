@@ -1,7 +1,8 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from '@ton/core';
 import { sign } from '@ton/crypto';
+import { JettonWallet } from "@ton-community/assets-sdk";
 
-const ZERO = Address.parse('EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c');
+export const ADDRESS_NONE = Address.parse('EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c');
 
 export type RelayEscrowConfig = {
     owner: Address;
@@ -22,6 +23,7 @@ export type TransferRequestData = {
     currencyType: CurrencyType;
     to: Address;
     jettonWallet?: Address;  // empty for TON, jetton wallet for Jetton
+    currency?: Address;
     amount: bigint;
     gasAmount: bigint;
     forwardAmount: bigint;
@@ -31,6 +33,25 @@ export type TransferRequestData = {
 export type TransferRequest = TransferRequestData & {
     signature: Buffer;      // 512 bits
 };
+
+export type DepositEvent = {
+    name: 'Deposit',
+    data: {
+        assetType: number; // 0 for TON, 1 for Jetton
+        amount: bigint;
+        depositor: string;
+        currency: string;
+    }
+}
+  
+export type WithdrawEvent = {
+    name: 'Withdraw',
+    data: {
+        currency: string;
+        amount: bigint; 
+        msgHash: bigint;
+    }
+}
 
 export function relayEscrowConfigToCell(config: RelayEscrowConfig): Cell {
     return beginCell()
@@ -158,6 +179,7 @@ export class RelayEscrow implements Contract {
             .storeUint(request.currencyType, 8)
             .storeAddress(request.to)
             .storeAddress(request.jettonWallet)
+            .storeAddress(request.currency)
             .storeCoins(request.amount)
             .storeCoins(request.forwardAmount)
             .storeCoins(request.gasAmount)
@@ -175,8 +197,9 @@ export class RelayEscrow implements Contract {
             .storeUint(request.currencyType, 8)
             .storeAddress(request.to)
             .storeAddress(request.currencyType === CurrencyType.TON 
-                ? ZERO
+                ? ADDRESS_NONE
                 : request.jettonWallet)
+            .storeAddress(request.currency)
             .storeCoins(request.amount)
             .storeCoins(request.forwardAmount)
             .storeCoins(request.gasAmount);
@@ -201,6 +224,7 @@ export class RelayEscrow implements Contract {
             currencyType: CurrencyType;
             to: Address;
             jettonWallet?: Address;
+            currency?: Address;
             amount: bigint;
             expiryInSeconds?: number;
             nonce?: bigint;
@@ -223,7 +247,8 @@ export class RelayEscrow implements Contract {
             expiry: Math.floor(Date.now() / 1000) + (opts.expiryInSeconds || 3600), // Default 1 hour
             currencyType: opts.currencyType,
             to: opts.to,
-            jettonWallet: opts.jettonWallet ?? ZERO,
+            jettonWallet: opts.jettonWallet ?? ADDRESS_NONE,
+            currency: opts.currency ?? ADDRESS_NONE,
             amount: opts.amount,
             gasAmount: opts.gasAmount ?? 200000000n,
             forwardAmount: opts.forwardAmount ?? 50000000n,
@@ -237,5 +262,47 @@ export class RelayEscrow implements Contract {
             ...requestData,
             signature
         };
+    }
+
+    static async parseOutMessage(message: any, provider: ContractProvider): Promise<DepositEvent | WithdrawEvent | null> {
+        if (message.info.dest !== null) {
+          return null;
+        }
+        const body = message.body.beginParse();
+        body.loadBits(6);
+        const eventCode = body.loadUint(32);
+        if (eventCode === 989312214) { // Deposit event
+            const assetType = body.loadUint(1);
+            const jettonWallet = body.loadAddress().toString();
+            const amount =  body.loadCoins();
+            const depositor = body.loadAddress().toString()
+
+            const eventJettonWallet = provider.open(
+                JettonWallet.createFromAddress(
+                    Address.parse(jettonWallet)
+                )
+            );
+
+          return {
+            name: "Deposit",
+            data: {
+                assetType,
+                currency: assetType === 0 ? ADDRESS_NONE.toString() : (await eventJettonWallet.getData()).jettonMaster.toString(),
+                amount,
+                depositor
+            }
+          };
+        } else if (eventCode === 989312215) { // Withdraw event
+          return {
+            name: "Withdraw",
+            data: {
+                currency: body.loadAddress().toString(),
+                amount: body.loadCoins(),
+                msgHash: body.loadUintBig(256)
+            }
+          };
+        }
+      
+        return null;
     }
 }

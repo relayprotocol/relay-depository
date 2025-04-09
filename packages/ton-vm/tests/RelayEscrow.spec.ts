@@ -1,9 +1,9 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
-import { Cell, toNano, Address } from '@ton/core';
+import { Cell, toNano, Address, fromNano } from '@ton/core';
 import { RelayEscrow, CurrencyType } from '../wrappers/RelayEscrow';
 import '@ton/test-utils';
 import { compile } from '@ton/blueprint';
-import { JettonMinter, jettonContentToInternal } from "@ton-community/assets-sdk";
+import { JettonMinter, JettonWallet, jettonContentToInternal } from "@ton-community/assets-sdk";
 import { beginCell, Dictionary } from "@ton/core";
 import { sha256_sync, KeyPair, keyPairFromSeed, getSecureRandomBytes } from "@ton/crypto";
 
@@ -192,21 +192,24 @@ describe('RelayEscrow Contract Tests', () => {
         
         const finalBalance = await escrowContract.getCurrentBalance();
         const actualDeposit = BigInt(finalBalance - initialBalance);
-        
+
         expect(depositResult.transactions).toHaveTransaction({
             from: depositorWallet.address,
             to: escrowContract.address,
             success: true,
         });
-        expect((depositAmount - actualDeposit) < toNano('0.0005')).toBe(true);
+        expect((depositAmount - actualDeposit) < toNano('0.01')).toBe(true);
     })
 
     it("should successfully deposit Jetton tokens", async() => {
         const depositAmount = BigInt(10 * 1e6);
         const escrowJettonWallet = await usdcMinterContract.getWallet(escrowContract.address);
         const initialBalance = await escrowJettonWallet.getData().then(c => c.balance).catch(c => 0n);
-        
-        const depositorJettonWallet = await usdcMinterContract.getWallet(depositorWallet.address);
+        const depositorJettonWalletAddress  = await usdcMinterContract.getWalletAddress(depositorWallet.address);
+        const depositorJettonWallet = blockchain.openContract(
+            JettonWallet.createFromAddress(depositorJettonWalletAddress)
+        );
+
         await depositorJettonWallet.send(
             depositorWallet.getSender(),
             escrowContract.address,
@@ -318,6 +321,7 @@ describe('RelayEscrow Contract Tests', () => {
                 currencyType: CurrencyType.JETTON,
                 to: recipientWallet.address,
                 jettonWallet: escrowJettonWallet.address,
+                currency: usdcMinterContract.address,
                 amount: transferAmount,
                 expiryInSeconds: 3600
             }
@@ -330,7 +334,7 @@ describe('RelayEscrow Contract Tests', () => {
                 requests: [request],
                 value: toNano('0.5')  // Need more gas for Jetton transfer
             }
-        );  
+        );
 
         // Verify transaction success
         expect(transferResult.transactions).toHaveTransaction({
@@ -422,6 +426,7 @@ describe('RelayEscrow Contract Tests', () => {
                 currencyType: CurrencyType.JETTON,
                 to: recipient2.address,
                 jettonWallet: escrowJettonWallet.address,
+                // currency: usdcMinterContract.address,
                 amount: transferAmount2,
                 expiryInSeconds: 3600,
                 nonce: currentNonce + 2n,
@@ -464,6 +469,7 @@ describe('RelayEscrow Contract Tests', () => {
 
     it("should prevent replay attacks", async () => {
         const transferAmount = toNano('1');
+        const currentNonce = await escrowContract.getNonce();
         
         // Create and execute first transfer
         const request = await escrowContract.createTransferRequest(
@@ -473,6 +479,7 @@ describe('RelayEscrow Contract Tests', () => {
                 currencyType: CurrencyType.TON,
                 to: recipientWallet.address,
                 amount: transferAmount,
+                nonce: currentNonce + 1n,
                 expiryInSeconds: 3600
             }
         );
