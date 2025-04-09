@@ -5,8 +5,13 @@ const int SIGNATURE_LENGTH = 512;
 const int PUBLIC_KEY_LENGTH = 256;
 
 const op::set_allocator = "op::set_allocator"c;
+const op::deposit = "op::deposit"c;
 const op::transfers = "op::transfers"c;
 const int op::transfer_notification = 0x7362d09c;
+
+const int event::deposit = 0x88879a49;
+const int event::transfer = 0x5c87ae7e;
+
 ;; Currency types
 const int CURRENCY_TON = 0;
 const int CURRENCY_JETTON = 1;
@@ -194,7 +199,7 @@ const int error::empty_actions = 107;
     }
 
     cell event_data = begin_cell()
-        .store_uint(989312215, 32)
+        .store_uint(event::transfer, 32)
         .store_slice(currency)      ;; Asset type
         .store_coins(amount)        ;; Amount
         .store_uint(msg_hash, 256)
@@ -210,11 +215,12 @@ const int error::empty_actions = 107;
         int flags = cs~load_uint(4);
         slice sender = cs~load_msg_addr();
         cell event_data = begin_cell()
-            .store_uint(989312214, 32)
+            .store_uint(event::deposit, 32)
             .store_uint(0, 1)           ;; Asset type
             .store_slice(my_address())  ;; Wallet
             .store_coins(msg_value)     ;; Amount
             .store_slice(sender)        ;; Depositor address
+            .store_uint(0, 64)          ;; ID
             .end_cell();
         
         send_log_message(event_data.begin_parse());
@@ -241,6 +247,22 @@ const int error::empty_actions = 107;
         return ();
     }
 
+    if (op == op::deposit) {  ;; custom op for TON deposit with ID
+        int deposit_id = in_msg_body~load_uint(64);
+        cell event_data = begin_cell()
+            .store_uint(event::deposit, 32)
+            .store_uint(0, 1)           ;; Asset type
+            .store_slice(my_address())  ;; Wallet
+            .store_coins(msg_value)     ;; Amount
+            .store_slice(sender)        ;; Depositor address
+            .store_uint(deposit_id, 64)          ;; ID
+            .end_cell();
+
+        send_log_message(event_data.begin_parse());
+        save_data();
+        return ();
+    }
+    
     ;; Multiple transfers in one transaction
     if (op == op::transfers) {
         cell actions = in_msg_body~load_ref();
@@ -267,13 +289,24 @@ const int error::empty_actions = 107;
     if (op == op::transfer_notification) {
         int amount = in_msg_body~load_coins(); ;; amount
         slice from_address = in_msg_body~load_msg_addr(); ;; sender address
+        int deposit_id = 0;
+        if (in_msg_body.slice_refs_empty?() == 0) {
+            cell payload = in_msg_body~load_ref();
+            slice ps = payload.begin_parse();
+            if (ps.slice_bits() >= 64) {
+                deposit_id = ps~load_uint(64);
+            }
+        }
+
         cell event_data = begin_cell()
-            .store_uint(989312214, 32)
+            .store_uint(event::deposit, 32)
             .store_uint(1, 1)           ;; Asset type
-            .store_slice(sender)           ;; Jetton Wallet
+            .store_slice(sender)        ;; Jetton Wallet
             .store_coins(amount)        ;; Amount
             .store_slice(from_address)  ;; Depositor address
+            .store_uint(deposit_id, 64)  ;; Id
             .end_cell();
+        
         send_log_message(event_data.begin_parse());
         return ();
     }

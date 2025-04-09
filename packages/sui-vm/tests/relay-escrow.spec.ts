@@ -2,7 +2,7 @@ import { describe, it, before } from 'mocha';
 import { expect } from 'chai';
 import { getFaucetHost, requestSuiFromFaucetV0 } from '@mysten/sui/faucet';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { getFullnodeUrl, SuiClient, SuiObjectRef } from '@mysten/sui/client';
+import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
 import { Transaction } from '@mysten/sui/transactions';
 import { execSync } from 'child_process';
 import { bcs } from "@mysten/sui/bcs";
@@ -188,7 +188,7 @@ describe('Relay Escrow', () => {
                 signer: alice,
                 transaction: tx,
                 requestType: 'WaitForLocalExecution',
-                options: { showEffects: true }
+                options: { showEffects: true, showEvents: true }
             });
 
             expect(response.effects?.status.status).to.equal('success');
@@ -260,9 +260,8 @@ describe('Relay Escrow', () => {
                 signer: alice,
                 transaction: tx,
                 requestType: 'WaitForLocalExecution',
-                options: { showEffects: true }
+                options: { showEffects: true, showEvents: true }
             });
-    
             expect(response.effects?.status.status).to.equal('success');
     
             const balanceAfter = await getBalance(USDC_COIN_TYPE);

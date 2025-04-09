@@ -1,6 +1,6 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
 import { Cell, toNano, Address, fromNano } from '@ton/core';
-import { RelayEscrow, CurrencyType } from '../wrappers/RelayEscrow';
+import { RelayEscrow, CurrencyType, DepositEvent, WithdrawEvent } from '../wrappers/RelayEscrow';
 import '@ton/test-utils';
 import { compile } from '@ton/blueprint';
 import { JettonMinter, JettonWallet, jettonContentToInternal } from "@ton-community/assets-sdk";
@@ -125,7 +125,8 @@ describe('RelayEscrow Contract Tests', () => {
 
         // Inital
         await escrowContract.sendDeposit(depositorWallet.getSender(), {
-            value:  toNano('100')
+            value:  toNano('100'),
+            depositId: 103n
         });
       
         const depositorJettonWallet = await usdcMinterContract.getWallet(depositorWallet.address);
@@ -134,7 +135,13 @@ describe('RelayEscrow Contract Tests', () => {
             escrowContract.address,
             BigInt(1000 * 1e6),
             {
-                value: toNano('0.05')
+                value: toNano('0.05'),
+                notify: {
+                    payload: 
+                        beginCell()
+                        .storeUint(10000000n, 64)
+                        .endCell(),
+                }
             }
         );
         
@@ -185,13 +192,23 @@ describe('RelayEscrow Contract Tests', () => {
     it("should successfully deposit TON", async() => {
         const depositAmount = toNano('100');
         const initialBalance = await escrowContract.getCurrentBalance();
-        
         const depositResult = await escrowContract.sendDeposit(depositorWallet.getSender(), {
-            value: depositAmount
+            value: depositAmount,
+            depositId: 109n
         });
         
         const finalBalance = await escrowContract.getCurrentBalance();
         const actualDeposit = BigInt(finalBalance - initialBalance);
+
+        let event: DepositEvent | null  = null;
+        for(const tx of depositResult.transactions) {
+            for(const msg of tx.outMessages.values()) {
+                event = (await RelayEscrow.parseOutMessage(msg, blockchain.provider(escrowContract.address))) as DepositEvent
+                if (event) {
+                    break;
+                }
+            }
+        }
 
         expect(depositResult.transactions).toHaveTransaction({
             from: depositorWallet.address,
@@ -199,6 +216,7 @@ describe('RelayEscrow Contract Tests', () => {
             success: true,
         });
         expect((depositAmount - actualDeposit) < toNano('0.01')).toBe(true);
+        expect(event?.data.depositId).toBe(109);
     })
 
     it("should successfully deposit Jetton tokens", async() => {
@@ -210,19 +228,35 @@ describe('RelayEscrow Contract Tests', () => {
             JettonWallet.createFromAddress(depositorJettonWalletAddress)
         );
 
-        await depositorJettonWallet.send(
+       const depositResult = await depositorJettonWallet.send(
             depositorWallet.getSender(),
             escrowContract.address,
             depositAmount,
             {
-                value: toNano('0.05')
+                value: toNano('0.05'),
+                notify: {
+                    payload: beginCell()
+                    .storeUint(108n, 64)
+                    .endCell(),
+                }
             }
         );
-        
+
+        let event: DepositEvent | null  = null;
+        for(const tx of depositResult.transactions) {
+            for(const msg of tx.outMessages.values()) {
+                event = (await RelayEscrow.parseOutMessage(msg, blockchain.provider(escrowContract.address))) as DepositEvent
+                if (event) {
+                    break;
+                }
+            }
+        }
+
         const finalBalance = await escrowJettonWallet.getData().then(c => c.balance).catch(c => 0n);
         const actualDeposit = BigInt(finalBalance - initialBalance);
         
         expect((depositAmount - actualDeposit) === 0n).toBe(true);
+        expect(event?.data.depositId).toBe(108);
     })
 
     it("should reject expired transfer request", async () => {
@@ -289,6 +323,16 @@ describe('RelayEscrow Contract Tests', () => {
                 value: toNano('0.5')
             }
         );
+
+        let event: WithdrawEvent | null  = null;
+        for(const tx of transferResult.transactions) {
+            for(const msg of tx.outMessages.values()) {
+                event = (await RelayEscrow.parseOutMessage(msg, blockchain.provider(escrowContract.address))) as WithdrawEvent
+                if (event) {
+                    break;
+                }
+            }
+        }
 
         // Verify transaction success
         expect(transferResult.transactions).toHaveTransaction({

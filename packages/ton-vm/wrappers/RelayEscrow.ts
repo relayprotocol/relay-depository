@@ -41,6 +41,7 @@ export type DepositEvent = {
         amount: bigint;
         depositor: string;
         currency: string;
+        depositId: bigint;
     }
 }
   
@@ -64,6 +65,7 @@ export function relayEscrowConfigToCell(config: RelayEscrowConfig): Cell {
 export const Opcodes = {
     setAllocator: 0xebfa1273,
     transfers: 0xd18ae4c2,
+    deposit: 0xf9471134,
 };
 
 export class RelayEscrow implements Contract {
@@ -132,12 +134,17 @@ export class RelayEscrow implements Contract {
         opts: {
             value: bigint;
             queryID?: number;
+            depositId?: bigint;
         }
     ) {
         await provider.internal(via, {
             value: opts.value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell().endCell(),
+            body: beginCell()
+                    .storeUint(Opcodes.deposit, 32)
+                    .storeUint(opts.queryID ?? 0, 64)
+                    .storeUint(opts.depositId ?? 0, 64)
+                .endCell(),
         });
     }
 
@@ -271,11 +278,12 @@ export class RelayEscrow implements Contract {
         const body = message.body.beginParse();
         body.loadBits(6);
         const eventCode = body.loadUint(32);
-        if (eventCode === 989312214) { // Deposit event
+        if (eventCode === 2290588233) { // Deposit event
             const assetType = body.loadUint(1);
             const jettonWallet = body.loadAddress().toString();
             const amount =  body.loadCoins();
-            const depositor = body.loadAddress().toString()
+            const depositor = body.loadAddress().toString();
+            const depositId = body.loadUint(64);
 
             const eventJettonWallet = provider.open(
                 JettonWallet.createFromAddress(
@@ -289,10 +297,11 @@ export class RelayEscrow implements Contract {
                 assetType,
                 currency: assetType === 0 ? ADDRESS_NONE.toString() : (await eventJettonWallet.getData()).jettonMaster.toString(),
                 amount,
-                depositor
+                depositor,
+                depositId
             }
           };
-        } else if (eventCode === 989312215) { // Withdraw event
+        } else if (eventCode === 1552395902) { // Withdraw event
           return {
             name: "Withdraw",
             data: {
