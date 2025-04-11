@@ -173,12 +173,14 @@ describe('Relay Escrow', () => {
 
             const tx = new Transaction();
             const [coin] = tx.splitCoins(coins.data[0].coinObjectId, [tx.pure.u64(DEPOSIT_AMOUNT)]);
+            const id = Buffer.from(Array(32).fill(1));
             tx.moveCall({
                 target: `${PACKAGE_ID}::escrow::deposit_coin`,
                 typeArguments: ['0x2::sui::SUI'],
                 arguments: [
                     tx.object(ESCROW_ID),
                     tx.object(coin),
+                    tx.pure.vector("u8", id),
                 ]
             });
             tx.setGasBudget(100000000);
@@ -244,13 +246,15 @@ describe('Relay Escrow', () => {
             const depositAmount = DEPOSIT_AMOUNT;
             const tx = new Transaction();
             const [coin] = tx.splitCoins(coins.data[0].coinObjectId, [tx.pure.u64(depositAmount)]);
-            
+            const id = Buffer.from(Array(32).fill(2));
+
             tx.moveCall({
                 target: `${PACKAGE_ID}::escrow::deposit_coin`,
                 typeArguments: [USDC_COIN_TYPE],
                 arguments: [
                     tx.object(ESCROW_ID),
                     tx.object(coin),
+                    tx.pure.vector('u8', id)
                 ]
             });
             tx.setGasBudget(100000000);
@@ -485,12 +489,15 @@ describe('Relay Escrow', () => {
             // Deposit additional funds
             const depositTx = new Transaction();
             const [coin] = depositTx.splitCoins(primaryCoin.coinObjectId, [depositTx.pure.u64(depositAmount)]);
+            const id = Buffer.from(Array(32).fill(3));
+
             depositTx.moveCall({
                 target: `${PACKAGE_ID}::escrow::deposit_coin`,
                 typeArguments: ['0x2::sui::SUI'],
                 arguments: [
                     depositTx.object(ESCROW_ID),
                     depositTx.object(coin),
+                    depositTx.pure.vector('u8', id)
                 ]
             });
             // Set a lower gas budget for deposit
@@ -500,9 +507,9 @@ describe('Relay Escrow', () => {
                 signer: alice,
                 transaction: depositTx,
                 requestType: 'WaitForLocalExecution',
-                options: { showEffects: true }
+                options: { showEffects: true, showEvents: true }
             });
-    
+
             expect(depositResponse.effects?.status.status).to.equal('success');
     
             // Get initial balances after deposit
