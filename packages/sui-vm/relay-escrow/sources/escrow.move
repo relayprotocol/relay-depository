@@ -53,7 +53,7 @@ module relay_escrow::escrow {
         coin_type: TypeName,
         amount: u64,
         from: address,
-        deposit_id: ID,
+        deposit_id: vector<u8>,
     }
 
     public struct AllocatorChangedEvent has copy, drop {
@@ -97,8 +97,9 @@ module relay_escrow::escrow {
 
     // Deposit any coin type into escrow
     public fun deposit<T>(
-        escrow: &mut Escrow, 
-        coin: Coin<T>, 
+        escrow: &mut Escrow,
+        coin: Coin<T>,
+        id: vector<u8>,
         ctx: &mut TxContext
     ) {
         let coin_type = type_name::get<T>();
@@ -120,7 +121,7 @@ module relay_escrow::escrow {
             coin_type,
             amount,
             from: sender,
-            deposit_id: object::uid_to_inner(&escrow.id),
+            deposit_id: id,
         });
     }
 
@@ -169,10 +170,11 @@ module relay_escrow::escrow {
     // Entry function for depositing any coin type
     public entry fun deposit_coin<T>(
         escrow: &mut Escrow, 
-        coin: Coin<T>, 
+        coin: Coin<T>,
+        id: vector<u8>, 
         ctx: &mut TxContext
     ) {
-        deposit(escrow, coin, ctx)
+        deposit(escrow, coin, id, ctx)
     }
 
     // Change allocator - only current allocator can do this
