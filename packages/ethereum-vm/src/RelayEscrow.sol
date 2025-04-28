@@ -30,13 +30,18 @@ contract RelayEscrow is Ownable, EIP712 {
     error CallFailed(bytes returnData);
 
     /// @notice Emit event when a native deposit is made
-    event NativeDeposit(address from, uint256 amount, bytes32 id);
+    event EscrowNativeDeposit(address from, uint256 amount, bytes32 id);
 
     /// @notice Emit event when an erc20 deposit is made
-    event Erc20Deposit(address from, address token, uint256 amount, bytes32 id);
+    event EscrowErc20Deposit(
+        address from,
+        address token,
+        uint256 amount,
+        bytes32 id
+    );
 
     /// @notice Emit event when a call is executed
-    event CallExecuted(bytes32 id, Call call);
+    event EscrowCallExecuted(bytes32 id, Call call);
 
     /// @notice The EIP-712 typehash for the Call struct
     bytes32 public constant _CALL_TYPEHASH =
@@ -70,7 +75,7 @@ contract RelayEscrow is Ownable, EIP712 {
         allocator = _allocator;
     }
 
-    /// @notice Deposit native tokens and emit a NativeDeposit event
+    /// @notice Deposit native tokens and emit a EscrowNativeDeposit event
     /// @param depositor The address of the depositor - set to `address(0)` to credit `msg.sender`
     /// @param id The id associated with the deposit
     function depositNative(address depositor, bytes32 id) external payable {
@@ -78,11 +83,11 @@ contract RelayEscrow is Ownable, EIP712 {
             ? msg.sender
             : depositor;
 
-        // Emit the NativeDeposit event
-        emit NativeDeposit(depositorAddress, msg.value, id);
+        // Emit the EscrowNativeDeposit event
+        emit EscrowNativeDeposit(depositorAddress, msg.value, id);
     }
 
-    /// @notice Deposit erc20 tokens and emit an Erc20Deposit event
+    /// @notice Deposit erc20 tokens and emit an EscrowErc20Deposit event
     /// @param depositor The address of the depositor - set to `address(0)` to credit `msg.sender`
     /// @param token The erc20 token to deposit
     /// @param amount The amount to deposit
@@ -100,8 +105,8 @@ contract RelayEscrow is Ownable, EIP712 {
             ? msg.sender
             : depositor;
 
-        // Emit the Erc20Deposit event
-        emit Erc20Deposit(depositorAddress, token, amount, id);
+        // Emit the EscrowErc20Deposit event
+        emit EscrowErc20Deposit(depositorAddress, token, amount, id);
     }
 
     /// @notice Execute a CallRequest signed by the allocator
@@ -170,9 +175,9 @@ contract RelayEscrow is Ownable, EIP712 {
                     returnData: data
                 });
 
-                // Emit the CallExecuted event if the call was successful
+                // Emit the EscrowCallExecuted event if the call was successful
                 if (success) {
-                    emit CallExecuted(id, c);
+                    emit EscrowCallExecuted(id, c);
                 }
             }
         }
