@@ -19,16 +19,26 @@ contract RelayEscrowTest is BaseTest, EIP712 {
     error InvalidSignature();
     error Unauthorized();
 
-    event NativeDeposit(address from, uint256 amount, bytes32 id);
-    event Erc20Deposit(address from, address token, uint256 amount, bytes32 id);
-    event CallRequestExecuted(bytes32 id, Call[] calls, CallResult[] results);
-
-    bytes32 public constant _CALL_TYPEHASH = keccak256("Call(address to,bytes data,uint256 value,bool allowFailure)");
-    bytes32 public constant _CALL_REQUEST_TYPEHASH = keccak256(
-        "CallRequest(Call[] calls,uint256 nonce,uint256 expiration)Call(address to,bytes data,uint256 value,bool allowFailure)"
+    event EscrowNativeDeposit(address from, uint256 amount, bytes32 id);
+    event EscrowErc20Deposit(
+        address from,
+        address token,
+        uint256 amount,
+        bytes32 id
     );
+    event EscrowCallExecuted(bytes32 id, Call call);
 
-    bytes32 public constant DOMAIN_SEPARATOR = 0x51fa773305558637d491860150e2b93d8f98be7fefefb6f2313f98ec2e9ae8d2;
+    bytes32 public constant _CALL_TYPEHASH =
+        keccak256(
+            "Call(address to,bytes data,uint256 value,bool allowFailure)"
+        );
+    bytes32 public constant _CALL_REQUEST_TYPEHASH =
+        keccak256(
+            "CallRequest(Call[] calls,uint256 nonce,uint256 expiration)Call(address to,bytes data,uint256 value,bool allowFailure)"
+        );
+
+    bytes32 public constant DOMAIN_SEPARATOR =
+        0x51fa773305558637d491860150e2b93d8f98be7fefefb6f2313f98ec2e9ae8d2;
 
     // Setup
 
@@ -41,7 +51,10 @@ contract RelayEscrowTest is BaseTest, EIP712 {
     // Tests
 
     function test_setAllocator() public {
-        Account memory newAllocator = makeAccountAndDeal("newAllocator", 1 ether);
+        Account memory newAllocator = makeAccountAndDeal(
+            "newAllocator",
+            1 ether
+        );
 
         vm.prank(alice.addr);
         vm.expectRevert(Unauthorized.selector);
@@ -55,10 +68,13 @@ contract RelayEscrowTest is BaseTest, EIP712 {
         vm.deal(alice.addr, amount);
 
         vm.expectEmit(true, true, true, true, address(relayEscrow));
-        emit NativeDeposit(alice.addr, amount, bytes32(uint256(1)));
+        emit EscrowNativeDeposit(alice.addr, amount, bytes32(uint256(1)));
 
         vm.prank(alice.addr);
-        relayEscrow.depositNative{value: amount}(alice.addr, bytes32(uint256(1)));
+        relayEscrow.depositNative{value: amount}(
+            alice.addr,
+            bytes32(uint256(1))
+        );
 
         assertEq(address(relayEscrow).balance, amount);
     }
@@ -70,10 +86,44 @@ contract RelayEscrowTest is BaseTest, EIP712 {
         erc20.approve(address(relayEscrow), amount);
 
         vm.expectEmit(true, true, true, true, address(relayEscrow));
-        emit Erc20Deposit(alice.addr, address(erc20), amount, bytes32(uint256(1)));
+        emit EscrowErc20Deposit(
+            alice.addr,
+            address(erc20),
+            amount,
+            bytes32(uint256(1))
+        );
 
         vm.prank(alice.addr);
-        relayEscrow.depositErc20(alice.addr, address(erc20), amount, bytes32(uint256(1)));
+        relayEscrow.depositErc20(
+            alice.addr,
+            address(erc20),
+            amount,
+            bytes32(uint256(1))
+        );
+
+        assertEq(erc20.balanceOf(address(relayEscrow)), amount);
+    }
+
+    function test_depositErc20_usingAllowance(uint96 amount) public {
+        erc20.mint(alice.addr, amount);
+
+        vm.prank(alice.addr);
+        erc20.approve(address(relayEscrow), amount);
+
+        vm.expectEmit(true, true, true, true, address(relayEscrow));
+        emit EscrowErc20Deposit(
+            alice.addr,
+            address(erc20),
+            amount,
+            bytes32(uint256(1))
+        );
+
+        vm.prank(alice.addr);
+        relayEscrow.depositErc20(
+            alice.addr,
+            address(erc20),
+            bytes32(uint256(1))
+        );
 
         assertEq(erc20.balanceOf(address(relayEscrow)), amount);
     }
@@ -83,14 +133,25 @@ contract RelayEscrowTest is BaseTest, EIP712 {
         test_depositNative(amount);
 
         Call[] memory calls = new Call[](1);
-        calls[0] = Call({to: alice.addr, data: bytes(""), value: amount, allowFailure: false});
+        calls[0] = Call({
+            to: alice.addr,
+            data: bytes(""),
+            value: amount,
+            allowFailure: false
+        });
 
         // Create call request
-        CallRequest memory request =
-            CallRequest({calls: calls, nonce: block.prevrandao, expiration: block.timestamp + 3600});
+        CallRequest memory request = CallRequest({
+            calls: calls,
+            nonce: block.prevrandao,
+            expiration: block.timestamp + 3600
+        });
 
         // Sign the call request
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(allocator.key, _hashCallRequest(request));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            allocator.key,
+            _hashCallRequest(request)
+        );
         bytes memory signature = bytes.concat(r, s, bytes1(v));
 
         assertEq(relayEscrow.allocator(), allocator.addr);
@@ -109,17 +170,27 @@ contract RelayEscrowTest is BaseTest, EIP712 {
         Call[] memory calls = new Call[](1);
         calls[0] = Call({
             to: address(erc20),
-            data: abi.encodeWithSelector(erc20.transfer.selector, alice.addr, amount),
+            data: abi.encodeWithSelector(
+                erc20.transfer.selector,
+                alice.addr,
+                amount
+            ),
             value: 0,
             allowFailure: false
         });
 
         // Create call request
-        CallRequest memory request =
-            CallRequest({calls: calls, nonce: block.prevrandao, expiration: block.timestamp + 3600});
+        CallRequest memory request = CallRequest({
+            calls: calls,
+            nonce: block.prevrandao,
+            expiration: block.timestamp + 3600
+        });
 
         // Sign the call request
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(allocator.key, _hashCallRequest(request));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            allocator.key,
+            _hashCallRequest(request)
+        );
         bytes memory signature = bytes.concat(r, s, bytes1(v));
 
         assertEq(relayEscrow.allocator(), allocator.addr);
@@ -131,19 +202,32 @@ contract RelayEscrowTest is BaseTest, EIP712 {
         assertEq(aliceBalanceAfter - aliceBalanceBefore, amount);
     }
 
-    function test_execute_withdrawNative_InvalidSignature(uint256 amount) public {
+    function test_execute_withdrawNative_InvalidSignature(
+        uint256 amount
+    ) public {
         // First, call `test_depositNative`
         test_depositNative(amount);
 
         Call[] memory calls = new Call[](1);
-        calls[0] = Call({to: alice.addr, data: bytes(""), value: amount, allowFailure: false});
+        calls[0] = Call({
+            to: alice.addr,
+            data: bytes(""),
+            value: amount,
+            allowFailure: false
+        });
 
         // Create call request
-        CallRequest memory request =
-            CallRequest({calls: calls, nonce: block.prevrandao, expiration: block.timestamp + 3600});
+        CallRequest memory request = CallRequest({
+            calls: calls,
+            nonce: block.prevrandao,
+            expiration: block.timestamp + 3600
+        });
 
         // Sign the call request
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(alice.key, _hashCallRequest(request));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            alice.key,
+            _hashCallRequest(request)
+        );
         bytes memory signature = bytes.concat(r, s, bytes1(v));
 
         assertEq(relayEscrow.allocator(), allocator.addr);
@@ -188,7 +272,9 @@ contract RelayEscrowTest is BaseTest, EIP712 {
 
     // Utils (copied from `RelayEscrow`)
 
-    function _hashCallRequest(CallRequest memory request) internal view returns (bytes32 digest) {
+    function _hashCallRequest(
+        CallRequest memory request
+    ) internal view returns (bytes32 digest) {
         // Initialize the array of call hashes
         bytes32[] memory callHashes = new bytes32[](request.calls.length);
 
@@ -211,12 +297,20 @@ contract RelayEscrowTest is BaseTest, EIP712 {
 
         // Get the EIP-712 digest
         digest = _hashTypedData(
-            keccak256(abi.encode(_CALL_REQUEST_TYPEHASH, keccak256(abi.encodePacked(callHashes)), request.nonce))
+            keccak256(
+                abi.encode(
+                    _CALL_REQUEST_TYPEHASH,
+                    keccak256(abi.encodePacked(callHashes)),
+                    request.nonce
+                )
+            )
         );
     }
 
     // Overwrite _hashTypedData to use RelayEscrow's domain separator
-    function _hashTypedData(bytes32 structHash) internal view override returns (bytes32 digest) {
+    function _hashTypedData(
+        bytes32 structHash
+    ) internal view override returns (bytes32 digest) {
         digest = _buildDomainSeparator(address(relayEscrow));
         /// @solidity memory-safe-assembly
         assembly {
@@ -228,7 +322,9 @@ contract RelayEscrowTest is BaseTest, EIP712 {
         }
     }
 
-    function _buildDomainSeparator(address verifyingContract) internal view returns (bytes32 separator) {
+    function _buildDomainSeparator(
+        address verifyingContract
+    ) internal view returns (bytes32 separator) {
         bytes32 versionHash;
         (string memory name, string memory version) = _domainNameAndVersion();
         separator = keccak256(bytes(name));
@@ -245,7 +341,12 @@ contract RelayEscrowTest is BaseTest, EIP712 {
         }
     }
 
-    function _domainNameAndVersion() internal pure override returns (string memory name, string memory version) {
+    function _domainNameAndVersion()
+        internal
+        pure
+        override
+        returns (string memory name, string memory version)
+    {
         name = "RelayEscrow";
         version = "1";
     }

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.23;
 
 import {Ownable} from "solady/auth/Ownable.sol";
+import {ERC20} from "solady/tokens/ERC20.sol";
 import {EIP712} from "solady/utils/EIP712.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {SignatureCheckerLib} from "solady/utils/SignatureCheckerLib.sol";
@@ -97,7 +98,7 @@ contract RelayEscrow is Ownable, EIP712 {
         address token,
         uint256 amount,
         bytes32 id
-    ) external {
+    ) public {
         // Transfer the tokens to the contract
         token.safeTransferFrom(msg.sender, address(this), amount);
 
@@ -107,6 +108,20 @@ contract RelayEscrow is Ownable, EIP712 {
 
         // Emit the EscrowErc20Deposit event
         emit EscrowErc20Deposit(depositorAddress, token, amount, id);
+    }
+
+    /// @notice Deposit erc20 tokens and emit an EscrowErc20Deposit event
+    /// @param depositor The address of the depositor - set to `address(0)` to credit `msg.sender`
+    /// @param token The erc20 token to deposit
+    /// @param id The id associated with the deposit
+    function depositErc20(
+        address depositor,
+        address token,
+        bytes32 id
+    ) external {
+        uint256 amount = ERC20(token).allowance(msg.sender, address(this));
+
+        depositErc20(depositor, token, amount, id);
     }
 
     /// @notice Execute a CallRequest signed by the allocator
