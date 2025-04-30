@@ -132,7 +132,7 @@ contract RelayEscrow is Ownable, EIP712 {
         CallRequest calldata request,
         bytes memory signature
     ) external returns (CallResult[] memory results) {
-        bytes32 id = _hashCallRequest(request);
+        (bytes32 structHash, bytes32 eip712Hash) = _hashCallRequest(request);
 
         // Validate the call request expiration
         if (request.expiration < block.timestamp) {
@@ -140,20 +140,20 @@ contract RelayEscrow is Ownable, EIP712 {
         }
 
         // Validate the allocator signature
-        if (!allocator.isValidSignatureNow(id, signature)) {
+        if (!allocator.isValidSignatureNow(eip712Hash, signature)) {
             revert InvalidSignature();
         }
 
         // Revert if the call request has already been used
-        if (callRequests[id]) {
+        if (callRequests[structHash]) {
             revert CallRequestAlreadyUsed();
         }
 
         // Mark the call request as used
-        callRequests[id] = true;
+        callRequests[structHash] = true;
 
         // Execute the calls
-        results = _executeCalls(id, request.calls);
+        results = _executeCalls(structHash, request.calls);
     }
 
     /// @notice Execute a list of calls
@@ -200,10 +200,11 @@ contract RelayEscrow is Ownable, EIP712 {
 
     /// @notice Helper function to hash a CallRequest and return the EIP-712 digest
     /// @param request The CallRequest to hash
-    /// @return digest The EIP-712 digest
+    /// @return structHash The struct hash
+    /// @return eip712Hash The EIP712 hash
     function _hashCallRequest(
         CallRequest calldata request
-    ) internal view returns (bytes32 digest) {
+    ) internal view returns (bytes32 structHash, bytes32 eip712Hash) {
         // Initialize the array of call hashes
         bytes32[] memory callHashes = new bytes32[](request.calls.length);
 
@@ -224,16 +225,17 @@ contract RelayEscrow is Ownable, EIP712 {
             callHashes[i] = callHash;
         }
 
-        // Get the EIP-712 digest
-        digest = _hashTypedData(
-            keccak256(
-                abi.encode(
-                    _CALL_REQUEST_TYPEHASH,
-                    keccak256(abi.encodePacked(callHashes)),
-                    request.nonce
-                )
+        // Get the struct hash
+        structHash = keccak256(
+            abi.encode(
+                _CALL_REQUEST_TYPEHASH,
+                keccak256(abi.encodePacked(callHashes)),
+                request.nonce
             )
         );
+
+        // Get the EIP-712 hash
+        eip712Hash = _hashTypedData(structHash);
     }
 
     /// @notice Returns the domain name and version of the contract to be used in the domain separator
