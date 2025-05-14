@@ -4,5 +4,6 @@
 
 - [Ethereum VM](./packages/ethereum-vm/)
 - [Solana VM](./packages/solana-vm/)
-- [Sui VM](./packages/suim-vm/)
+- [Sui VM](./packages/sui-vm/)
+- [Ton VM](./packages/ton-vm/)
 - More VM types coming soon
