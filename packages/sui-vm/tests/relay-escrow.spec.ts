@@ -314,7 +314,7 @@ describe('Relay Escrow', () => {
 
             const signature = await allocator.sign(messageHash);
             const bobBalanceBefore = await getCoinBalance(bob.toSuiAddress(), "0x2::sui::SUI");
-            
+
             // Execute transfer
             const tx = new Transaction();
             tx.moveCall({

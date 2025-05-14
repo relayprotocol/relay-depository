@@ -166,6 +166,13 @@ module relay_escrow::escrow {
         balance::value(balance)
     }
 
+    public fun check_request_executed(
+        executed_requests: &mut ExecutedRequests, 
+        request_hash: vector<u8>
+    ): bool {
+        is_request_executed(executed_requests, request_hash)
+    }
+
     // === Entry Functions ===
     // Entry function for depositing any coin type
     public entry fun deposit_coin<T>(
