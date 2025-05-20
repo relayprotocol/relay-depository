@@ -4,9 +4,15 @@ out = "out"
 libs = ["lib"]
 
 [rpc_endpoints]
+# Mainnets
+base = "${BASE_RPC_URL}"
+# Testnets
 sepolia = "${SEPOLIA_RPC_URL}"
 base-sepolia = "${BASE_SEPOLIA_RPC_URL}"
 
 [etherscan]
+# Mainnets
+base = { key = "${BASE_ETHERSCAN_KEY}" }
+# Testnets
 sepolia = { key = "${SEPOLIA_ETHERSCAN_KEY}" }
 base-sepolia = { key = "${BASE_SEPOLIA_ETHERSCAN_KEY}" }

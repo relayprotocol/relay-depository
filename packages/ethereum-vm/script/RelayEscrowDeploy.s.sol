@@ -6,8 +6,6 @@ import "forge-std/Script.sol";
 import {RelayEscrow} from "../src/RelayEscrow.sol";
 
 contract RelayEscrowDeploy is Script {
-    address allocator;
-
     function setUp() public {}
 
     function run() public {
@@ -15,9 +13,11 @@ contract RelayEscrowDeploy is Script {
 
         vm.startBroadcast();
 
-        RelayEscrow relayEscrow = new RelayEscrow(msg.sender);
+        address allocator = vm.envAddress("ALLOCATOR");
 
-        assert(relayEscrow.allocator() == msg.sender);
+        RelayEscrow relayEscrow = new RelayEscrow(allocator);
+
+        assert(relayEscrow.allocator() == allocator);
         assert(relayEscrow.owner() == msg.sender);
 
         vm.stopBroadcast();
