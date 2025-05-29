@@ -230,7 +230,8 @@ contract RelayEscrow is Ownable, EIP712 {
             abi.encode(
                 _CALL_REQUEST_TYPEHASH,
                 keccak256(abi.encodePacked(callHashes)),
-                request.nonce
+                request.nonce,
+                request.expiration
             )
         );
 

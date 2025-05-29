@@ -236,40 +236,6 @@ contract RelayEscrowTest is BaseTest, EIP712 {
         relayEscrow.execute(request, signature);
     }
 
-    // function _hashCallRequest(
-    //     CallRequest memory request
-    // ) internal returns (bytes32 digest) {
-    //     bytes32[] memory call3ValuesHashes = new bytes32[](
-    //         request.call3Values.length
-    //     );
-
-    //     // Hash the call3Values
-    //     for (uint256 i = 0; i < request.call3Values.length; i++) {
-    //         bytes32 call3ValueHash = keccak256(
-    //             abi.encode(
-    //                 _CALL3VALUE_TYPEHASH,
-    //                 request.call3Values[i].target,
-    //                 request.call3Values[i].allowFailure,
-    //                 request.call3Values[i].value,
-    //                 keccak256(request.call3Values[i].callData)
-    //             )
-    //         );
-
-    //         call3ValuesHashes[i] = call3ValueHash;
-    //     }
-
-    //     // Get the EIP-712 digest to be signed
-    //     bytes32 structHash = keccak256(
-    //         abi.encode(
-    //             _CALL_REQUEST_TYPEHASH,
-    //             keccak256(abi.encodePacked(call3ValuesHashes)),
-    //             request.nonce
-    //         )
-    //     );
-
-    //     digest = _hashTypedData(structHash);
-    // }
-
     // Utils (copied from `RelayEscrow`)
 
     function _hashCallRequest(
@@ -301,7 +267,8 @@ contract RelayEscrowTest is BaseTest, EIP712 {
                 abi.encode(
                     _CALL_REQUEST_TYPEHASH,
                     keccak256(abi.encodePacked(callHashes)),
-                    request.nonce
+                    request.nonce,
+                    request.expiration
                 )
             )
         );
