@@ -1,13 +1,5 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { RelayEscrow } from "../target/types/relay_escrow";
-import {
-  PublicKey,
-  SystemProgram,
-  LAMPORTS_PER_SOL,
-  Keypair,
-} from "@solana/web3.js";
-
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -16,10 +8,17 @@ import {
   getAssociatedTokenAddress,
   mintTo,
 } from "@solana/spl-token";
+import {
+  PublicKey,
+  SystemProgram,
+  LAMPORTS_PER_SOL,
+  Keypair,
+} from "@solana/web3.js";
 import { assert } from "chai";
+import { sha256 } from "js-sha256";
+import nacl from "tweetnacl";
 
-import * as nacl from "tweetnacl";
-import { sha256 } from 'js-sha256';
+import { RelayEscrow } from "../target/types/relay_escrow";
 
 describe("Relay Escrow", () => {
   const provider = anchor.AnchorProvider.env();
@@ -50,10 +49,16 @@ describe("Relay Escrow", () => {
   before(async () => {
     // Airdrop SOL to test accounts
     await provider.connection.confirmTransaction(
-      await provider.connection.requestAirdrop(owner.publicKey, 10 * LAMPORTS_PER_SOL)
+      await provider.connection.requestAirdrop(
+        owner.publicKey,
+        10 * LAMPORTS_PER_SOL
+      )
     );
     await provider.connection.confirmTransaction(
-      await provider.connection.requestAirdrop(user.publicKey, 2 * LAMPORTS_PER_SOL)
+      await provider.connection.requestAirdrop(
+        user.publicKey,
+        2 * LAMPORTS_PER_SOL
+      )
     );
 
     // Find PDAs
@@ -132,7 +137,6 @@ describe("Relay Escrow", () => {
       assert.ok(relayEscrowAccount.owner.equals(owner.publicKey));
       assert.ok(relayEscrowAccount.allocator.equals(allocator.publicKey));
       assert.equal(relayEscrowAccount.vaultBump, vaultBump);
-
     } catch (error) {
       console.error("Error during initialization:", error);
       throw error;
@@ -141,7 +145,7 @@ describe("Relay Escrow", () => {
 
   it("Owner can set new allocator", async () => {
     const newAllocator = Keypair.generate();
-    
+
     // Call set_allocator as owner
     await program.methods
       .setAllocator(newAllocator.publicKey)
@@ -151,13 +155,13 @@ describe("Relay Escrow", () => {
       })
       .signers([owner])
       .rpc();
-  
+
     // Verify the allocator was updated
     const relayEscrowAccount = await program.account.relayEscrow.fetch(
       relayEscrowPDA
     );
     assert.ok(relayEscrowAccount.allocator.equals(newAllocator.publicKey));
-  
+
     // Reset allocator back to original for other tests
     await program.methods
       .setAllocator(allocator.publicKey)
@@ -168,16 +172,19 @@ describe("Relay Escrow", () => {
       .signers([owner])
       .rpc();
   });
-  
+
   it("Non-owner cannot set new allocator", async () => {
     const newAllocator = Keypair.generate();
     const nonOwner = Keypair.generate();
-    
+
     // Airdrop some SOL to non-owner for transaction fee
     await provider.connection.confirmTransaction(
-      await provider.connection.requestAirdrop(nonOwner.publicKey, LAMPORTS_PER_SOL)
+      await provider.connection.requestAirdrop(
+        nonOwner.publicKey,
+        LAMPORTS_PER_SOL
+      )
     );
-  
+
     try {
       // Attempt to call set_allocator as non-owner
       await program.methods
@@ -188,12 +195,12 @@ describe("Relay Escrow", () => {
         })
         .signers([nonOwner])
         .rpc();
-      
+
       assert.fail("Should have thrown error");
     } catch (err) {
       assert.include(err.message, "Unauthorized");
     }
-  
+
     // Verify allocator was not changed
     const relayEscrowAccount = await program.account.relayEscrow.fetch(
       relayEscrowPDA
@@ -201,15 +208,17 @@ describe("Relay Escrow", () => {
     assert.ok(relayEscrowAccount.allocator.equals(allocator.publicKey));
   });
 
-  it("Deposit SOL", async () => {
+  it("Deposit native", async () => {
     const depositAmount = LAMPORTS_PER_SOL; // 1 SOL
     const id = Buffer.from(Array(32).fill(1)); // Example ID
 
-    const userBalanceBefore = await provider.connection.getBalance(user.publicKey);
+    const userBalanceBefore = await provider.connection.getBalance(
+      user.publicKey
+    );
     const vaultBalanceBefore = await provider.connection.getBalance(vaultPDA);
 
     await program.methods
-      .depositSol(new anchor.BN(depositAmount), id)
+      .depositNative(new anchor.BN(depositAmount), id)
       .accounts({
         relayEscrow: relayEscrowPDA,
         depositor: user.publicKey,
@@ -219,7 +228,9 @@ describe("Relay Escrow", () => {
       .signers([user])
       .rpc();
 
-    const userBalanceAfter = await provider.connection.getBalance(user.publicKey);
+    const userBalanceAfter = await provider.connection.getBalance(
+      user.publicKey
+    );
     const vaultBalanceAfter = await provider.connection.getBalance(vaultPDA);
 
     assert.equal(
@@ -234,13 +245,14 @@ describe("Relay Escrow", () => {
     );
   });
 
-  it("Deposit SPL Token", async () => {
+  it("Deposit Token", async () => {
     const depositAmount = LAMPORTS_PER_SOL; // 1 token
     const id = Array.from(Buffer.alloc(32, 2)); // Example ID
 
     try {
       // Get initial balances
-      const userBalanceBefore = await provider.connection.getTokenAccountBalance(userTokenAccount);
+      const userBalanceBefore =
+        await provider.connection.getTokenAccountBalance(userTokenAccount);
       // const vaultBalanceBefore = await provider.connection.getTokenAccountBalance(vaultTokenAccount);
 
       // Create vault token account if it doesn't exist
@@ -274,11 +286,15 @@ describe("Relay Escrow", () => {
         .rpc();
 
       // Verify balances after deposit
-      const userBalanceAfter = await provider.connection.getTokenAccountBalance(userTokenAccount);
-      const vaultBalanceAfter = await provider.connection.getTokenAccountBalance(vaultTokenAccount);
+      const userBalanceAfter = await provider.connection.getTokenAccountBalance(
+        userTokenAccount
+      );
+      const vaultBalanceAfter =
+        await provider.connection.getTokenAccountBalance(vaultTokenAccount);
 
       assert.equal(
-        Number(userBalanceBefore.value.amount) - Number(userBalanceAfter.value.amount),
+        Number(userBalanceBefore.value.amount) -
+          Number(userBalanceAfter.value.amount),
         depositAmount,
         "Incorrect token deduction from user"
       );
@@ -296,25 +312,24 @@ describe("Relay Escrow", () => {
 
   it("Execute transfer with allocator signature", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 10; // 0.1 SOL
-    
+
     // Create transfer request
     const request = {
       recipient: recipient.publicKey,
       token: null, // SOL transfer
       amount: new anchor.BN(transferAmount),
       nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(( Date.now() / 1000)) + 300)
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
     };
 
-    const message = program.coder.types.encode(
-      'TransferRequest',
-      request
-    );
+    const message = program.coder.types.encode("transferRequest", request);
 
     // Sign with allocator
     const signature = nacl.sign.detached(message, allocator.secretKey);
 
-    const recipientBalanceBefore = await provider.connection.getBalance(recipient.publicKey);
+    const recipientBalanceBefore = await provider.connection.getBalance(
+      recipient.publicKey
+    );
     const vaultBalanceBefore = await provider.connection.getBalance(vaultPDA);
 
     const requestPDA = await getUsedRequestPDA(request);
@@ -335,18 +350,18 @@ describe("Relay Escrow", () => {
         systemProgram: SystemProgram.programId,
         ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .preInstructions(
-        [
-          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
-            publicKey: allocator.publicKey.toBytes(),
-            message: message,
-            signature: signature,
-          }),
-        ]
-      );
+      .preInstructions([
+        anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+          publicKey: allocator.publicKey.toBytes(),
+          message: message,
+          signature: signature,
+        }),
+      ]);
 
     const events = (await hanlde.simulate()).events || [];
-    const TransferExecutedEvent = events.find(c => c.name === "TransferExecutedEvent");
+    const TransferExecutedEvent = events.find(
+      (c) => c.name === "TransferExecutedEvent"
+    );
     assert.equal(
       TransferExecutedEvent.data.executor.toBase58(),
       provider.wallet.publicKey.toBase58(),
@@ -371,14 +386,12 @@ describe("Relay Escrow", () => {
       requestPDA
     );
 
-    const recipientBalanceAfter = await provider.connection.getBalance(recipient.publicKey);
+    const recipientBalanceAfter = await provider.connection.getBalance(
+      recipient.publicKey
+    );
     const vaultBalanceAfter = await provider.connection.getBalance(vaultPDA);
 
-    assert.equal(
-      usedRequestState.isUsed,
-      true,
-      "Incorrect usedRequest State"
-    );
+    assert.equal(usedRequestState.isUsed, true, "Incorrect usedRequest State");
 
     assert.equal(
       recipientBalanceAfter - recipientBalanceBefore,
@@ -394,26 +407,26 @@ describe("Relay Escrow", () => {
 
   it("Execute SPL token transfer with allocator signature", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 2; // 0.5 SOL
-    
+
     // Create transfer request
     const request = {
       recipient: recipient.publicKey,
       token: mintPubkey, // SOL transfer
       amount: new anchor.BN(transferAmount),
       nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(( Date.now() / 1000)) + 300)
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
     };
 
-    const message = program.coder.types.encode(
-      'TransferRequest',
-      request
-    );
+    const message = program.coder.types.encode("transferRequest", request);
 
     // Sign with allocator
     const signature = nacl.sign.detached(message, allocator.secretKey);
 
-    const recipientBalanceBefore = await provider.connection.getTokenAccountBalance(recipientTokenAccount);
-    const vaultBalanceBefore = await provider.connection.getTokenAccountBalance(vaultTokenAccount);
+    const recipientBalanceBefore =
+      await provider.connection.getTokenAccountBalance(recipientTokenAccount);
+    const vaultBalanceBefore = await provider.connection.getTokenAccountBalance(
+      vaultTokenAccount
+    );
 
     const requestPDA = await getUsedRequestPDA(request);
 
@@ -433,37 +446,36 @@ describe("Relay Escrow", () => {
         systemProgram: SystemProgram.programId,
         ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .preInstructions(
-       [
-          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
-            publicKey: allocator.publicKey.toBytes(),
-            message: message,
-            signature: signature,
-          }),
-       ]
-      )
+      .preInstructions([
+        anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+          publicKey: allocator.publicKey.toBytes(),
+          message: message,
+          signature: signature,
+        }),
+      ])
       .rpc();
 
     const usedRequestState = await program.account.usedRequest.fetch(
       requestPDA
     );
 
-    const recipientBalanceAfter = await provider.connection.getTokenAccountBalance(recipientTokenAccount);
-    const vaultBalanceAfter = await provider.connection.getTokenAccountBalance(vaultTokenAccount);
-
-    assert.equal(
-      usedRequestState.isUsed,
-      true,
-      "Incorrect usedRequest State"
+    const recipientBalanceAfter =
+      await provider.connection.getTokenAccountBalance(recipientTokenAccount);
+    const vaultBalanceAfter = await provider.connection.getTokenAccountBalance(
+      vaultTokenAccount
     );
 
+    assert.equal(usedRequestState.isUsed, true, "Incorrect usedRequest State");
+
     assert.equal(
-      Number(recipientBalanceAfter.value.amount) - Number(recipientBalanceBefore.value.amount),
+      Number(recipientBalanceAfter.value.amount) -
+        Number(recipientBalanceBefore.value.amount),
       transferAmount,
       "Incorrect SPL transfer to recipient"
     );
     assert.equal(
-      Number(vaultBalanceBefore.value.amount) - Number(vaultBalanceAfter.value.amount),
+      Number(vaultBalanceBefore.value.amount) -
+        Number(vaultBalanceAfter.value.amount),
       transferAmount,
       "Incorrect SPL deduction from vault"
     );
@@ -478,17 +490,17 @@ describe("Relay Escrow", () => {
       token: null,
       amount: new anchor.BN(transferAmount),
       nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(( Date.now() / 1000)) + 300)
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
     };
-  
-    const message = program.coder.types.encode(
-      'TransferRequest',
-      request
-    );
-  
+
+    const message = program.coder.types.encode("transferRequest", request);
+
     // Create invalid signature with fake allocator
-    const invalidSignature = nacl.sign.detached(message, fakeAllocator.secretKey);
-  
+    const invalidSignature = nacl.sign.detached(
+      message,
+      fakeAllocator.secretKey
+    );
+
     const requestPDA = await getUsedRequestPDA(request);
 
     try {
@@ -508,41 +520,36 @@ describe("Relay Escrow", () => {
           systemProgram: SystemProgram.programId,
           ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
         })
-        .preInstructions(
-          [
-            anchor.web3.Ed25519Program.createInstructionWithPublicKey({
-              publicKey: fakeAllocator.publicKey.toBytes(),
-              message: message,
-              signature: invalidSignature,
-            }),
-          ]
-        )
+        .preInstructions([
+          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+            publicKey: fakeAllocator.publicKey.toBytes(),
+            message: message,
+            signature: invalidSignature,
+          }),
+        ])
         .rpc();
       assert.fail("Should have failed with invalid signature");
     } catch (e) {
       assert.include(e.message, "AllocatorSignerMismatch");
     }
   });
-  
+
   it("Should not allow double execution of same request", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 2;
-    
+
     const request = {
       recipient: recipient.publicKey,
       token: null,
       amount: new anchor.BN(transferAmount),
       nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(( Date.now() / 1000)) + 300)
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
     };
-  
-    const message = program.coder.types.encode(
-      'TransferRequest',
-      request
-    );
-    
+
+    const message = program.coder.types.encode("transferRequest", request);
+
     const signature = nacl.sign.detached(message, allocator.secretKey);
     const requestPDA = await getUsedRequestPDA(request);
-  
+
     // First execution
     await program.methods
       .executeTransfer(request)
@@ -560,17 +567,15 @@ describe("Relay Escrow", () => {
         systemProgram: SystemProgram.programId,
         ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
       })
-      .preInstructions(
-        [
-          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
-            publicKey: allocator.publicKey.toBytes(),
-            message: message,
-            signature: signature,
-          }),
-        ]
-      )
+      .preInstructions([
+        anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+          publicKey: allocator.publicKey.toBytes(),
+          message: message,
+          signature: signature,
+        }),
+      ])
       .rpc();
-  
+
     // Second execution should fail
     try {
       await program.methods
@@ -589,15 +594,13 @@ describe("Relay Escrow", () => {
           systemProgram: SystemProgram.programId,
           ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
         })
-        .preInstructions(
-          [
-            anchor.web3.Ed25519Program.createInstructionWithPublicKey({
-              publicKey: allocator.publicKey.toBytes(),
-              message: message,
-              signature: signature,
-            }),
-          ]
-        )
+        .preInstructions([
+          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+            publicKey: allocator.publicKey.toBytes(),
+            message: message,
+            signature: signature,
+          }),
+        ])
         .rpc();
       assert.fail("Should have failed with request already used");
     } catch (e) {
@@ -608,14 +611,14 @@ describe("Relay Escrow", () => {
 
   it("Execute multiple transfers in single transaction", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 10; // 0.25 SOL each
-    
+
     // Create two transfer requests
     const request1 = {
       recipient: recipient.publicKey,
       token: null, // SOL transfer
       amount: new anchor.BN(transferAmount),
       nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor((Date.now() / 1000)) + 300)
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
     };
 
     const request2 = {
@@ -623,13 +626,13 @@ describe("Relay Escrow", () => {
       token: mintPubkey, // Token transfer
       amount: new anchor.BN(transferAmount),
       nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor((Date.now() / 1000)) + 300)
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
     };
 
     // Encode messages and create signatures
-    const message1 = program.coder.types.encode('TransferRequest', request1);
-    const message2 = program.coder.types.encode('TransferRequest', request2);
-    
+    const message1 = program.coder.types.encode("transferRequest", request1);
+    const message2 = program.coder.types.encode("transferRequest", request2);
+
     const signature1 = nacl.sign.detached(message1, allocator.secretKey);
     const signature2 = nacl.sign.detached(message2, allocator.secretKey);
 
@@ -638,10 +641,15 @@ describe("Relay Escrow", () => {
     const requestPDA2 = await getUsedRequestPDA(request2);
 
     // Get initial balances
-    const recipientSOLBefore = await provider.connection.getBalance(recipient.publicKey);
+    const recipientSOLBefore = await provider.connection.getBalance(
+      recipient.publicKey
+    );
     const vaultSOLBefore = await provider.connection.getBalance(vaultPDA);
-    const recipientTokenBefore = await provider.connection.getTokenAccountBalance(recipientTokenAccount);
-    const vaultTokenBefore = await provider.connection.getTokenAccountBalance(vaultTokenAccount);
+    const recipientTokenBefore =
+      await provider.connection.getTokenAccountBalance(recipientTokenAccount);
+    const vaultTokenBefore = await provider.connection.getTokenAccountBalance(
+      vaultTokenAccount
+    );
 
     // Create transaction with multiple instructions
     const tx = new anchor.web3.Transaction();
@@ -708,17 +716,34 @@ describe("Relay Escrow", () => {
     await provider.sendAndConfirm(tx);
 
     // Verify execution
-    const usedRequestState1 = await program.account.usedRequest.fetch(requestPDA1);
-    const usedRequestState2 = await program.account.usedRequest.fetch(requestPDA2);
+    const usedRequestState1 = await program.account.usedRequest.fetch(
+      requestPDA1
+    );
+    const usedRequestState2 = await program.account.usedRequest.fetch(
+      requestPDA2
+    );
 
-    assert.equal(usedRequestState1.isUsed, true, "First request should be marked as used");
-    assert.equal(usedRequestState2.isUsed, true, "Second request should be marked as used");
+    assert.equal(
+      usedRequestState1.isUsed,
+      true,
+      "First request should be marked as used"
+    );
+    assert.equal(
+      usedRequestState2.isUsed,
+      true,
+      "Second request should be marked as used"
+    );
 
     // Verify balances
-    const recipientSOLAfter = await provider.connection.getBalance(recipient.publicKey);
+    const recipientSOLAfter = await provider.connection.getBalance(
+      recipient.publicKey
+    );
     const vaultSOLAfter = await provider.connection.getBalance(vaultPDA);
-    const recipientTokenAfter = await provider.connection.getTokenAccountBalance(recipientTokenAccount);
-    const vaultTokenAfter = await provider.connection.getTokenAccountBalance(vaultTokenAccount);
+    const recipientTokenAfter =
+      await provider.connection.getTokenAccountBalance(recipientTokenAccount);
+    const vaultTokenAfter = await provider.connection.getTokenAccountBalance(
+      vaultTokenAccount
+    );
 
     // Verify SOL transfer
     assert.equal(
@@ -734,145 +759,141 @@ describe("Relay Escrow", () => {
 
     // Verify Token transfer
     assert.equal(
-      Number(recipientTokenAfter.value.amount) - Number(recipientTokenBefore.value.amount),
+      Number(recipientTokenAfter.value.amount) -
+        Number(recipientTokenBefore.value.amount),
       transferAmount,
       "Incorrect token transfer amount"
     );
     assert.equal(
-      Number(vaultTokenBefore.value.amount) - Number(vaultTokenAfter.value.amount),
+      Number(vaultTokenBefore.value.amount) -
+        Number(vaultTokenAfter.value.amount),
       transferAmount,
       "Incorrect token deduction from vault"
     );
   });
 
   it("Should fail batch transfer if one signature is invalid", async () => {
-      const transferAmount = LAMPORTS_PER_SOL / 10;
-      
-      // Create two transfer requests
-      const request1 = {
-        recipient: recipient.publicKey,
-        token: null,
-        amount: new anchor.BN(transferAmount),
-        nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-        expiration: new anchor.BN(Math.floor((Date.now() / 1000)) + 300)
-      };
+    const transferAmount = LAMPORTS_PER_SOL / 10;
 
-      const request2 = {
-        recipient: recipient.publicKey,
-        token: null,
-        amount: new anchor.BN(transferAmount),
-        nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-        expiration: new anchor.BN(Math.floor((Date.now() / 1000)) + 300)
-      };
+    // Create two transfer requests
+    const request1 = {
+      recipient: recipient.publicKey,
+      token: null,
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
+    };
 
-      const message1 = program.coder.types.encode('TransferRequest', request1);
-      const message2 = program.coder.types.encode('TransferRequest', request2);
-      
-      const signature1 = nacl.sign.detached(message1, allocator.secretKey);
-      // Use wrong signer for second signature
-      const fakeAllocator = Keypair.generate();
-      const signature2 = nacl.sign.detached(message2, fakeAllocator.secretKey);
+    const request2 = {
+      recipient: recipient.publicKey,
+      token: null,
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
+    };
 
-      const requestPDA1 = await getUsedRequestPDA(request1);
-      const requestPDA2 = await getUsedRequestPDA(request2);
+    const message1 = program.coder.types.encode("transferRequest", request1);
+    const message2 = program.coder.types.encode("transferRequest", request2);
 
-      const tx = new anchor.web3.Transaction();
+    const signature1 = nacl.sign.detached(message1, allocator.secretKey);
+    // Use wrong signer for second signature
+    const fakeAllocator = Keypair.generate();
+    const signature2 = nacl.sign.detached(message2, fakeAllocator.secretKey);
 
-      // Add first transfer
-      tx.add(
-        anchor.web3.Ed25519Program.createInstructionWithPublicKey({
-          publicKey: allocator.publicKey.toBytes(),
-          message: message1,
-          signature: signature1,
+    const requestPDA1 = await getUsedRequestPDA(request1);
+    const requestPDA2 = await getUsedRequestPDA(request2);
+
+    const tx = new anchor.web3.Transaction();
+
+    // Add first transfer
+    tx.add(
+      anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+        publicKey: allocator.publicKey.toBytes(),
+        message: message1,
+        signature: signature1,
+      })
+    );
+
+    tx.add(
+      await program.methods
+        .executeTransfer(request1)
+        .accounts({
+          mint: null,
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayEscrow: relayEscrowPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA1,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
         })
-      );
+        .instruction()
+    );
 
-      tx.add(
-        await program.methods
-          .executeTransfer(request1)
-          .accounts({
-            mint: null,
-            vaultTokenAccount: null,
-            recipientTokenAccount: null,
-            relayEscrow: relayEscrowPDA,
-            executor: provider.wallet.publicKey,
-            recipient: recipient.publicKey,
-            vault: vaultPDA,
-            usedRequest: requestPDA1,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-            ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
-          })
-          .instruction()
-      );
+    // Add second transfer with invalid signature
+    tx.add(
+      anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+        publicKey: fakeAllocator.publicKey.toBytes(),
+        message: message2,
+        signature: signature2,
+      })
+    );
 
-      // Add second transfer with invalid signature
-      tx.add(
-        anchor.web3.Ed25519Program.createInstructionWithPublicKey({
-          publicKey: fakeAllocator.publicKey.toBytes(),
-          message: message2,
-          signature: signature2,
+    tx.add(
+      await program.methods
+        .executeTransfer(request2)
+        .accounts({
+          mint: null,
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayEscrow: relayEscrowPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA2,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
         })
-      );
+        .instruction()
+    );
 
-      tx.add(
-        await program.methods
-          .executeTransfer(request2)
-          .accounts({
-            mint: null,
-            vaultTokenAccount: null,
-            recipientTokenAccount: null,
-            relayEscrow: relayEscrowPDA,
-            executor: provider.wallet.publicKey,
-            recipient: recipient.publicKey,
-            vault: vaultPDA,
-            usedRequest: requestPDA2,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-            ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
-          })
-          .instruction()
-      );
+    try {
+      await provider.sendAndConfirm(tx);
+      assert.fail("Should fail due to invalid signature");
+    } catch (e) {
+      assert.include(e.message, "AllocatorSignerMismatch");
+
+      // Verify neither transfer was executed
+      try {
+        await program.account.usedRequest.fetch(requestPDA1);
+        assert.fail("First request should not exist");
+      } catch (e) {
+        assert.include(e.message, "Account does not exist");
+      }
 
       try {
-        await provider.sendAndConfirm(tx);
-        assert.fail("Should fail due to invalid signature");
+        await program.account.usedRequest.fetch(requestPDA2);
+        assert.fail("Second request should not exist");
       } catch (e) {
-        assert.include(e.message, "AllocatorSignerMismatch");
-        
-        // Verify neither transfer was executed
-        try {
-          await program.account.usedRequest.fetch(requestPDA1);
-          assert.fail("First request should not exist");
-        } catch (e) {
-          assert.include(e.message, "Account does not exist");
-        }
-
-        try {
-          await program.account.usedRequest.fetch(requestPDA2);
-          assert.fail("Second request should not exist");
-        } catch (e) {
-          assert.include(e.message, "Account does not exist");
-        }
+        assert.include(e.message, "Account does not exist");
       }
+    }
   });
 
   const getUsedRequestPDA = async (request) => {
-    const message = program.coder.types.encode(
-      'TransferRequest',
-      request
-    );
-    
+    const message = program.coder.types.encode("transferRequest", request);
+
     const hashData = sha256.create();
     hashData.update(message);
     const requestHash = Buffer.from(hashData.array());
     const [pda] = await PublicKey.findProgramAddress(
-      [
-        Buffer.from("used_request"),
-        requestHash
-      ],
+      [Buffer.from("used_request"), requestHash],
       program.programId
     );
     return pda;
