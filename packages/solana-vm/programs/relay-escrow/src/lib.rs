@@ -18,7 +18,7 @@ use anchor_spl::{
 // Program ID
 //----------------------------------------
 
-declare_id!("Hz17BWNjrZXrVDjQxYXZGwhdCAQakmMBS5EcZfZxxvto");
+declare_id!("2eAeUDN5EpxUB8ebCPu2HNnC9r1eJ3m2JSXGUWdxCMJg");
 
 //----------------------------------------
 // Program Module
