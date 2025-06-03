@@ -357,10 +357,9 @@ describe("Relay Escrow", () => {
           signature: signature,
         }),
       ]);
-
     const events = (await hanlde.simulate()).events || [];
     const TransferExecutedEvent = events.find(
-      (c) => c.name === "transferExecutedEvent"
+      (c) => c.name === "TransferExecutedEvent"
     );
     assert.equal(
       TransferExecutedEvent.data.executor.toBase58(),
@@ -771,92 +770,122 @@ describe("Relay Escrow", () => {
     );
   });
 
-  // it("Should fail batch transfer if one signature is invalid", async () => {
-  //   const transferAmount = LAMPORTS_PER_SOL / 10;
+  it("Should fail batch transfer if one signature is invalid", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 10;
 
-  //   // Create two transfer requests
-  //   const request1 = {
-  //     recipient: recipient.publicKey,
-  //     token: null,
-  //     amount: new anchor.BN(transferAmount),
-  //     nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-  //     expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-  //   };
-  //   const request2 = {
-  //     recipient: recipient.publicKey,
-  //     token: null,
-  //     amount: new anchor.BN(transferAmount),
-  //     nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-  //     expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-  //   };
+    // Create two transfer requests
+    const request1 = {
+      recipient: recipient.publicKey,
+      token: null,
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
+    };
+    const request2 = {
+      recipient: recipient.publicKey,
+      token: null,
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
+    };
 
-  //   const message1Hash = hashRequest(request1);
-  //   const message2Hash = hashRequest(request2);
+    const message1Hash = hashRequest(request1);
+    const message2Hash = hashRequest(request2);
 
-  //   const signature1 = nacl.sign.detached(message1Hash, allocator.secretKey);
-  //   const signature2 = nacl.sign.detached(
-  //     message2Hash,
-  //     Keypair.generate().secretKey
-  //   );
+    const signature1 = nacl.sign.detached(message1Hash, allocator.secretKey);
 
-  //   const message1 = program.coder.types.encode("transferRequest", request1);
-  //   const message2 = program.coder.types.encode("transferRequest", request2);
+    // Use wrong signer for second signature
+    const fakeAllocator = Keypair.generate();
+    const signature2 = nacl.sign.detached(message2Hash, fakeAllocator.secretKey);
 
-  //   const tx = new anchor.web3.Transaction();
+    const requestPDA1 = await getUsedRequestPDA(request1);
+    const requestPDA2 = await getUsedRequestPDA(request2);
 
-  //   // Add first transfer
-  //   tx.add(
-  //     anchor.web3.Ed25519Program.createInstructionWithPublicKey({
-  //       publicKey: allocator.publicKey.toBytes(),
-  //       message: message1Hash,
-  //       signature: signature1,
-  //     }).instruction()
-  //   );
+    const tx = new anchor.web3.Transaction();
 
-  //   // Add second transfer with invalid signature
-  //   tx.add(
-  //     anchor.web3.Ed25519Program.createInstructionWithPublicKey({
-  //       publicKey: fakeAllocator.publicKey.toBytes(),
-  //       message: message2Hash,
-  //       signature: signature2,
-  //     })
-  //   );
+    // Add first transfer
+    tx.add(
+      anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+        publicKey: allocator.publicKey.toBytes(),
+        message: message1Hash,
+        signature: signature1,
+      })
+    );
 
-  //   // Add second transfer with invalid signature
-  //   tx.add(
-  //     anchor.web3.Ed25519Program.createInstructionWithPublicKey({
-  //       publicKey: fakeAllocator.publicKey.toBytes(),
-  //       message: message2Hash,
-  //       signature: signature2,
-  //     }).instruction()
-  //   );
+    tx.add(
+      await program.methods
+        .executeTransfer(request1)
+        .accounts({
+          mint: null,
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayEscrow: relayEscrowPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA1,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .instruction()
+    );
 
-  //   try {
-  //     await provider.sendAndConfirm(tx);
-  //     assert.fail("Should fail due to invalid signature");
-  //   } catch (e) {
-  //     assert.include(e.message, "AllocatorSignerMismatch");
+    // Add second transfer with invalid signature
+    tx.add(
+      anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+        publicKey: fakeAllocator.publicKey.toBytes(),
+        message: message2Hash,
+        signature: signature2,
+      })
+    );
 
-  //     // Verify neither transfer was executed
-  //     try {
-  //       await program.account.usedRequest.fetch(requestPDA1);
-  //       assert.fail("First request should not exist");
-  //     } catch (e) {
-  //       assert.include(e.message, "Account does not exist");
-  //     }
+    tx.add(
+      await program.methods
+        .executeTransfer(request2)
+        .accounts({
+          mint: null,
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayEscrow: relayEscrowPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA2,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .instruction()
+    );
 
-  //     try {
-  //       await program.account.usedRequest.fetch(requestPDA2);
-  //       assert.fail("Second request should not exist");
-  //     } catch (e) {
-  //       assert.include(e.message, "Account does not exist");
-  //     }
-  //   }
-  // });
+    try {
+      await provider.sendAndConfirm(tx);
+      assert.fail("Should fail due to invalid signature");
+    } catch (e) {
+      assert.include(e.message, "AllocatorSignerMismatch");
+
+      // Verify neither transfer was executed
+      try {
+        await program.account.usedRequest.fetch(requestPDA1);
+        assert.fail("First request should not exist");
+      } catch (e) {
+        assert.include(e.message, "Account does not exist");
+      }
+
+      try {
+        await program.account.usedRequest.fetch(requestPDA2);
+        assert.fail("Second request should not exist");
+      } catch (e) {
+        assert.include(e.message, "Account does not exist");
+      }
+    }
+  });
 
   const hashRequest = (request) => {
-    const message = program.coder.types.encode("transferRequest", request);
-
+    const message = program.coder.types.encode("TransferRequest", request);
     const hashData = sha256.create();
     hashData.update(message);
     return Buffer.from(hashData.array());
