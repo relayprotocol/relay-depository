@@ -360,7 +360,7 @@ describe("Relay Escrow", () => {
 
     const events = (await hanlde.simulate()).events || [];
     const TransferExecutedEvent = events.find(
-      (c) => c.name === "TransferExecutedEvent"
+      (c) => c.name === "transferExecutedEvent"
     );
     assert.equal(
       TransferExecutedEvent.data.executor.toBase58(),
