@@ -1,5 +1,4 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
 import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -26,7 +25,7 @@ describe("Relay Escrow", () => {
   // Configure the client to use the local cluster
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.RelayEscrow as Program<RelayEscrow>;
+  const program = anchor.workspace.RelayEscrow as anchor.Program<RelayEscrow>;
 
   // Test accounts
   const owner = Keypair.generate();
@@ -120,7 +119,7 @@ describe("Relay Escrow", () => {
     try {
       await program.methods
         .initialize()
-        .accounts({
+        .accountsPartial({
           relayEscrow: relayEscrowPDA,
           vault: vaultPDA,
           owner: owner.publicKey,
@@ -149,7 +148,7 @@ describe("Relay Escrow", () => {
     // Call set_allocator as owner
     await program.methods
       .setAllocator(newAllocator.publicKey)
-      .accounts({
+      .accountsPartial({
         relayEscrow: relayEscrowPDA,
         owner: owner.publicKey,
       })
@@ -165,7 +164,7 @@ describe("Relay Escrow", () => {
     // Reset allocator back to original for other tests
     await program.methods
       .setAllocator(allocator.publicKey)
-      .accounts({
+      .accountsPartial({
         relayEscrow: relayEscrowPDA,
         owner: owner.publicKey,
       })
@@ -189,7 +188,7 @@ describe("Relay Escrow", () => {
       // Attempt to call set_allocator as non-owner
       await program.methods
         .setAllocator(newAllocator.publicKey)
-        .accounts({
+        .accountsPartial({
           relayEscrow: relayEscrowPDA,
           owner: nonOwner.publicKey,
         })
@@ -209,8 +208,8 @@ describe("Relay Escrow", () => {
   });
 
   it("Deposit native", async () => {
-    const depositAmount = LAMPORTS_PER_SOL; // 1 SOL
-    const id = Buffer.from(Array(32).fill(1)); // Example ID
+    const depositAmount = LAMPORTS_PER_SOL;
+    const id = Array.from(Array(32).fill(1));
 
     const userBalanceBefore = await provider.connection.getBalance(
       user.publicKey
@@ -219,7 +218,7 @@ describe("Relay Escrow", () => {
 
     await program.methods
       .depositNative(new anchor.BN(depositAmount), id)
-      .accounts({
+      .accountsPartial({
         relayEscrow: relayEscrowPDA,
         depositor: user.publicKey,
         vault: vaultPDA,
@@ -246,14 +245,13 @@ describe("Relay Escrow", () => {
   });
 
   it("Deposit token", async () => {
-    const depositAmount = LAMPORTS_PER_SOL; // 1 token
-    const id = Array.from(Buffer.alloc(32, 2)); // Example ID
+    const depositAmount = LAMPORTS_PER_SOL;
+    const id = Array.from(Buffer.alloc(32, 2));
 
     try {
       // Get initial balances
       const userBalanceBefore =
         await provider.connection.getTokenAccountBalance(userTokenAccount);
-      // const vaultBalanceBefore = await provider.connection.getTokenAccountBalance(vaultTokenAccount);
 
       // Create vault token account if it doesn't exist
       try {
@@ -262,16 +260,19 @@ describe("Relay Escrow", () => {
           owner, // payer
           mintPubkey,
           vaultPDA,
+          undefined,
+          undefined,
+          undefined,
           true // allowOwnerOffCurve
         );
-      } catch (e) {
+      } catch {
         // Skip errors
       }
 
       // Deposit tokens
       await program.methods
         .depositToken(new anchor.BN(depositAmount), id)
-        .accounts({
+        .accountsPartial({
           relayEscrow: relayEscrowPDA,
           depositor: user.publicKey,
           mint: mintPubkey,
@@ -336,7 +337,7 @@ describe("Relay Escrow", () => {
 
     const hanlde = program.methods
       .executeTransfer(request)
-      .accounts({
+      .accountsPartial({
         mint: null,
         vaultTokenAccount: null,
         recipientTokenAccount: null,
@@ -431,7 +432,7 @@ describe("Relay Escrow", () => {
 
     await program.methods
       .executeTransfer(request)
-      .accounts({
+      .accountsPartial({
         mint: mintPubkey,
         vaultTokenAccount,
         recipientTokenAccount,
@@ -505,7 +506,7 @@ describe("Relay Escrow", () => {
     try {
       await program.methods
         .executeTransfer(request)
-        .accounts({
+        .accountsPartial({
           mint: null,
           vaultTokenAccount: null,
           recipientTokenAccount: null,
@@ -551,7 +552,7 @@ describe("Relay Escrow", () => {
     // First execution
     await program.methods
       .executeTransfer(request)
-      .accounts({
+      .accountsPartial({
         mint: null,
         vaultTokenAccount: null,
         recipientTokenAccount: null,
@@ -578,7 +579,7 @@ describe("Relay Escrow", () => {
     try {
       await program.methods
         .executeTransfer(request)
-        .accounts({
+        .accountsPartial({
           mint: null,
           vaultTokenAccount: null,
           recipientTokenAccount: null,
@@ -664,7 +665,7 @@ describe("Relay Escrow", () => {
     tx.add(
       await program.methods
         .executeTransfer(request1)
-        .accounts({
+        .accountsPartial({
           mint: null,
           vaultTokenAccount: null,
           recipientTokenAccount: null,
@@ -693,7 +694,7 @@ describe("Relay Escrow", () => {
     tx.add(
       await program.methods
         .executeTransfer(request2)
-        .accounts({
+        .accountsPartial({
           mint: mintPubkey,
           vaultTokenAccount,
           recipientTokenAccount,
@@ -818,7 +819,7 @@ describe("Relay Escrow", () => {
     tx.add(
       await program.methods
         .executeTransfer(request1)
-        .accounts({
+        .accountsPartial({
           mint: null,
           vaultTokenAccount: null,
           recipientTokenAccount: null,
@@ -847,7 +848,7 @@ describe("Relay Escrow", () => {
     tx.add(
       await program.methods
         .executeTransfer(request2)
-        .accounts({
+        .accountsPartial({
           mint: null,
           vaultTokenAccount: null,
           recipientTokenAccount: null,

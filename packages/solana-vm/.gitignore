@@ -1,7 +1,16 @@
-
+# Anchor
 .anchor
-.DS_Store
+
+# Build
 target
-**/*.rs.bk
+
+# Dependencies
 node_modules
+
+# Misc
+.DS_Store
+**/*.rs.bk
 test-ledger
+
+# Scripts
+scripts
