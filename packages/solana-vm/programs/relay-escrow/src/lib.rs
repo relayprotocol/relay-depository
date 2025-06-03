@@ -469,14 +469,12 @@ fn validate_ed25519_signature_instruction(
         CustomError::AllocatorSignerMismatch
     );
 
-    // Verify signed message matches request
-    let mut verified_message = &data[112..];
-    let deserialized_request = TransferRequest::deserialize(&mut verified_message)?;
-    require_eq!(
-        deserialized_request.get_hash(),
-        expected_request.get_hash(),
-        CustomError::MessageMismatch
-    );
+    // Verify message hash matches request hash
+    let message_hash = &data[112..112 + 32];
+    let expected_hash = expected_request.get_hash().to_bytes();
+    if message_hash != expected_hash {
+        return Err(CustomError::MessageMismatch.into());
+    }
 
     Ok(())
 }
