@@ -306,13 +306,10 @@ describe("Relay Escrow", () => {
       expiration: new anchor.BN(Math.floor(( Date.now() / 1000)) + 300)
     };
 
-    const message = program.coder.types.encode(
-      'TransferRequest',
-      request
-    );
+    const messagHash = hashRequest(request);
 
     // Sign with allocator
-    const signature = nacl.sign.detached(message, allocator.secretKey);
+    const signature = nacl.sign.detached(messagHash, allocator.secretKey);
 
     const recipientBalanceBefore = await provider.connection.getBalance(recipient.publicKey);
     const vaultBalanceBefore = await provider.connection.getBalance(vaultPDA);
@@ -339,7 +336,7 @@ describe("Relay Escrow", () => {
         [
           anchor.web3.Ed25519Program.createInstructionWithPublicKey({
             publicKey: allocator.publicKey.toBytes(),
-            message: message,
+            message: messagHash,
             signature: signature,
           }),
         ]
@@ -404,13 +401,10 @@ describe("Relay Escrow", () => {
       expiration: new anchor.BN(Math.floor(( Date.now() / 1000)) + 300)
     };
 
-    const message = program.coder.types.encode(
-      'TransferRequest',
-      request
-    );
+    const messagHash = hashRequest(request);
 
     // Sign with allocator
-    const signature = nacl.sign.detached(message, allocator.secretKey);
+    const signature = nacl.sign.detached(messagHash, allocator.secretKey);
 
     const recipientBalanceBefore = await provider.connection.getTokenAccountBalance(recipientTokenAccount);
     const vaultBalanceBefore = await provider.connection.getTokenAccountBalance(vaultTokenAccount);
@@ -437,7 +431,7 @@ describe("Relay Escrow", () => {
        [
           anchor.web3.Ed25519Program.createInstructionWithPublicKey({
             publicKey: allocator.publicKey.toBytes(),
-            message: message,
+            message: messagHash,
             signature: signature,
           }),
        ]
@@ -481,13 +475,10 @@ describe("Relay Escrow", () => {
       expiration: new anchor.BN(Math.floor(( Date.now() / 1000)) + 300)
     };
   
-    const message = program.coder.types.encode(
-      'TransferRequest',
-      request
-    );
+    const messagHash = hashRequest(request);
   
     // Create invalid signature with fake allocator
-    const invalidSignature = nacl.sign.detached(message, fakeAllocator.secretKey);
+    const invalidSignature = nacl.sign.detached(messagHash, fakeAllocator.secretKey);
   
     const requestPDA = await getUsedRequestPDA(request);
 
@@ -512,7 +503,7 @@ describe("Relay Escrow", () => {
           [
             anchor.web3.Ed25519Program.createInstructionWithPublicKey({
               publicKey: fakeAllocator.publicKey.toBytes(),
-              message: message,
+              message: messagHash,
               signature: invalidSignature,
             }),
           ]
@@ -535,12 +526,8 @@ describe("Relay Escrow", () => {
       expiration: new anchor.BN(Math.floor(( Date.now() / 1000)) + 300)
     };
   
-    const message = program.coder.types.encode(
-      'TransferRequest',
-      request
-    );
-    
-    const signature = nacl.sign.detached(message, allocator.secretKey);
+    const messagHash = hashRequest(request);
+    const signature = nacl.sign.detached(messagHash, allocator.secretKey);
     const requestPDA = await getUsedRequestPDA(request);
   
     // First execution
@@ -564,7 +551,7 @@ describe("Relay Escrow", () => {
         [
           anchor.web3.Ed25519Program.createInstructionWithPublicKey({
             publicKey: allocator.publicKey.toBytes(),
-            message: message,
+            message: messagHash,
             signature: signature,
           }),
         ]
@@ -593,7 +580,7 @@ describe("Relay Escrow", () => {
           [
             anchor.web3.Ed25519Program.createInstructionWithPublicKey({
               publicKey: allocator.publicKey.toBytes(),
-              message: message,
+              message: messagHash,
               signature: signature,
             }),
           ]
@@ -627,11 +614,11 @@ describe("Relay Escrow", () => {
     };
 
     // Encode messages and create signatures
-    const message1 = program.coder.types.encode('TransferRequest', request1);
-    const message2 = program.coder.types.encode('TransferRequest', request2);
-    
-    const signature1 = nacl.sign.detached(message1, allocator.secretKey);
-    const signature2 = nacl.sign.detached(message2, allocator.secretKey);
+    const message1Hash = hashRequest(request1);
+    const message2Hash = hashRequest(request2);
+
+    const signature1 = nacl.sign.detached(message1Hash, allocator.secretKey);
+    const signature2 = nacl.sign.detached(message2Hash, allocator.secretKey);
 
     // Get PDAs
     const requestPDA1 = await getUsedRequestPDA(request1);
@@ -650,7 +637,7 @@ describe("Relay Escrow", () => {
     tx.add(
       anchor.web3.Ed25519Program.createInstructionWithPublicKey({
         publicKey: allocator.publicKey.toBytes(),
-        message: message1,
+        message: message1Hash,
         signature: signature1,
       })
     );
@@ -679,7 +666,7 @@ describe("Relay Escrow", () => {
     tx.add(
       anchor.web3.Ed25519Program.createInstructionWithPublicKey({
         publicKey: allocator.publicKey.toBytes(),
-        message: message2,
+        message: message2Hash,
         signature: signature2,
       })
     );
@@ -765,13 +752,13 @@ describe("Relay Escrow", () => {
         expiration: new anchor.BN(Math.floor((Date.now() / 1000)) + 300)
       };
 
-      const message1 = program.coder.types.encode('TransferRequest', request1);
-      const message2 = program.coder.types.encode('TransferRequest', request2);
+      const message1Hash = hashRequest(request1);
+      const message2Hash = hashRequest(request2);
       
-      const signature1 = nacl.sign.detached(message1, allocator.secretKey);
+      const signature1 = nacl.sign.detached(message1Hash, allocator.secretKey);
       // Use wrong signer for second signature
       const fakeAllocator = Keypair.generate();
-      const signature2 = nacl.sign.detached(message2, fakeAllocator.secretKey);
+      const signature2 = nacl.sign.detached(message2Hash, fakeAllocator.secretKey);
 
       const requestPDA1 = await getUsedRequestPDA(request1);
       const requestPDA2 = await getUsedRequestPDA(request2);
@@ -782,7 +769,7 @@ describe("Relay Escrow", () => {
       tx.add(
         anchor.web3.Ed25519Program.createInstructionWithPublicKey({
           publicKey: allocator.publicKey.toBytes(),
-          message: message1,
+          message: message1Hash,
           signature: signature1,
         })
       );
@@ -811,7 +798,7 @@ describe("Relay Escrow", () => {
       tx.add(
         anchor.web3.Ed25519Program.createInstructionWithPublicKey({
           publicKey: fakeAllocator.publicKey.toBytes(),
-          message: message2,
+          message: message2Hash,
           signature: signature2,
         })
       );
@@ -859,7 +846,7 @@ describe("Relay Escrow", () => {
       }
   });
 
-  const getUsedRequestPDA = async (request) => {
+  const hashRequest = (request) => {
     const message = program.coder.types.encode(
       'TransferRequest',
       request
@@ -867,7 +854,11 @@ describe("Relay Escrow", () => {
     
     const hashData = sha256.create();
     hashData.update(message);
-    const requestHash = Buffer.from(hashData.array());
+    return Buffer.from(hashData.array());
+  }
+
+  const getUsedRequestPDA = async (request) => {
+    const requestHash = hashRequest(request);
     const [pda] = await PublicKey.findProgramAddress(
       [
         Buffer.from("used_request"),
