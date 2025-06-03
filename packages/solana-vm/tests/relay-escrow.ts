@@ -220,6 +220,7 @@ describe("Relay Escrow", () => {
       .depositNative(new anchor.BN(depositAmount), id)
       .accountsPartial({
         relayEscrow: relayEscrowPDA,
+        sender: user.publicKey,
         depositor: user.publicKey,
         vault: vaultPDA,
         systemProgram: SystemProgram.programId,
@@ -274,9 +275,10 @@ describe("Relay Escrow", () => {
         .depositToken(new anchor.BN(depositAmount), id)
         .accountsPartial({
           relayEscrow: relayEscrowPDA,
-          depositor: user.publicKey,
           mint: mintPubkey,
-          depositorTokenAccount: userTokenAccount,
+          sender: user.publicKey,
+          senderTokenAccount: userTokenAccount,
+          depositor: user.publicKey,
           vaultTokenAccount: vaultTokenAccount,
           vault: vaultPDA,
           tokenProgram: TOKEN_PROGRAM_ID,

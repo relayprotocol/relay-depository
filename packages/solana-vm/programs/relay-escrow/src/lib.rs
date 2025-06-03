@@ -54,12 +54,12 @@ pub mod relay_escrow {
         // Transfer to vault
         invoke(
             &system_instruction::transfer(
-                ctx.accounts.depositor.key,
+                ctx.accounts.sender.key,
                 &ctx.accounts.vault.key(),
                 amount,
             ),
             &[
-                ctx.accounts.depositor.to_account_info(),
+                ctx.accounts.sender.to_account_info(),
                 ctx.accounts.vault.to_account_info(),
                 ctx.accounts.system_program.to_account_info(),
             ],
@@ -82,7 +82,7 @@ pub mod relay_escrow {
             anchor_spl::associated_token::create(CpiContext::new(
                 ctx.accounts.associated_token_program.to_account_info(),
                 Create {
-                    payer: ctx.accounts.depositor.to_account_info(),
+                    payer: ctx.accounts.sender.to_account_info(),
                     associated_token: ctx.accounts.vault_token_account.to_account_info(),
                     authority: ctx.accounts.vault.to_account_info(),
                     mint: ctx.accounts.mint.to_account_info(),
@@ -97,9 +97,9 @@ pub mod relay_escrow {
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
                 Transfer {
-                    from: ctx.accounts.depositor_token_account.to_account_info(),
+                    from: ctx.accounts.sender_token_account.to_account_info(),
                     to: ctx.accounts.vault_token_account.to_account_info(),
-                    authority: ctx.accounts.depositor.to_account_info(),
+                    authority: ctx.accounts.sender.to_account_info(),
                 },
             ),
             amount,
@@ -272,7 +272,10 @@ pub struct DepositNative<'info> {
     pub relay_escrow: Account<'info, RelayEscrow>,
 
     #[account(mut)]
-    pub depositor: Signer<'info>,
+    pub sender: Signer<'info>,
+
+    /// CHECK: Used as public key only
+    pub depositor: UncheckedAccount<'info>,
 
     /// CHECK: PDA vault that will hold tokens
     #[account(
@@ -293,17 +296,20 @@ pub struct DepositToken<'info> {
     )]
     pub relay_escrow: Account<'info, RelayEscrow>,
 
-    #[account(mut)]
-    pub depositor: Signer<'info>,
-
     pub mint: Account<'info, token::Mint>,
+
+    #[account(mut)]
+    pub sender: Signer<'info>,
 
     #[account(
         mut,
         associated_token::mint = mint,
-        associated_token::authority = depositor
+        associated_token::authority = sender
     )]
-    pub depositor_token_account: Account<'info, TokenAccount>,
+    pub sender_token_account: Account<'info, TokenAccount>,
+
+    /// CHECK: Used as public key only
+    pub depositor: UncheckedAccount<'info>,
 
     /// CHECK: Will be initialized if needed
     #[account(mut)]
