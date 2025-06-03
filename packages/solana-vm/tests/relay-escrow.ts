@@ -116,7 +116,7 @@ describe("Relay Escrow", () => {
     );
   });
 
-  it("Initialize RelayEscrow", async () => {
+  it("Initialize", async () => {
     try {
       await program.methods
         .initialize()
@@ -245,7 +245,7 @@ describe("Relay Escrow", () => {
     );
   });
 
-  it("Deposit Token", async () => {
+  it("Deposit token", async () => {
     const depositAmount = LAMPORTS_PER_SOL; // 1 token
     const id = Array.from(Buffer.alloc(32, 2)); // Example ID
 
@@ -310,7 +310,7 @@ describe("Relay Escrow", () => {
     }
   });
 
-  it("Execute transfer with allocator signature", async () => {
+  it("Execute native transfer with allocator signature", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 10; // 0.1 SOL
 
     // Create transfer request
@@ -359,7 +359,7 @@ describe("Relay Escrow", () => {
       ]);
     const events = (await hanlde.simulate()).events || [];
     const TransferExecutedEvent = events.find(
-      (c) => c.name === "TransferExecutedEvent"
+      (c) => c.name === "transferExecutedEvent"
     );
     assert.equal(
       TransferExecutedEvent.data.executor.toBase58(),
@@ -404,7 +404,7 @@ describe("Relay Escrow", () => {
     );
   });
 
-  it("Execute SPL token transfer with allocator signature", async () => {
+  it("Execute token transfer with allocator signature", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 2; // 0.5 SOL
 
     // Create transfer request
@@ -607,7 +607,7 @@ describe("Relay Escrow", () => {
     }
   });
 
-  it("Execute multiple transfers in single transaction", async () => {
+  it("Execute multiple transfer requests in a single transaction", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 10; // 0.25 SOL each
 
     // Create two transfer requests
@@ -770,7 +770,7 @@ describe("Relay Escrow", () => {
     );
   });
 
-  it("Should fail batch transfer if one signature is invalid", async () => {
+  it("Should fail executing multiple transfer request if one signature is invalid", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 10;
 
     // Create two transfer requests
@@ -796,7 +796,10 @@ describe("Relay Escrow", () => {
 
     // Use wrong signer for second signature
     const fakeAllocator = Keypair.generate();
-    const signature2 = nacl.sign.detached(message2Hash, fakeAllocator.secretKey);
+    const signature2 = nacl.sign.detached(
+      message2Hash,
+      fakeAllocator.secretKey
+    );
 
     const requestPDA1 = await getUsedRequestPDA(request1);
     const requestPDA2 = await getUsedRequestPDA(request2);
@@ -884,14 +887,14 @@ describe("Relay Escrow", () => {
     }
   });
 
-  const hashRequest = (request) => {
-    const message = program.coder.types.encode("TransferRequest", request);
+  const hashRequest = (request: any) => {
+    const message = program.coder.types.encode("transferRequest", request);
     const hashData = sha256.create();
     hashData.update(message);
     return Buffer.from(hashData.array());
   };
 
-  const getUsedRequestPDA = async (request) => {
+  const getUsedRequestPDA = async (request: any) => {
     const requestHash = hashRequest(request);
     const [pda] = await PublicKey.findProgramAddress(
       [Buffer.from("used_request"), requestHash],

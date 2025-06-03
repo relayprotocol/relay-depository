@@ -10,7 +10,7 @@ cluster = "Localnet"
 wallet = "~/.config/solana/id.json"
 
 [programs.localnet]
-my_program = "Hz17BWNjrZXrVDjQxYXZGwhdCAQakmMBS5EcZfZxxvto"
+relay_escrow = "Hz17BWNjrZXrVDjQxYXZGwhdCAQakmMBS5EcZfZxxvto"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

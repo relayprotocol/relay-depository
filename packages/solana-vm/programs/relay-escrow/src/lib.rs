@@ -18,7 +18,7 @@ use anchor_spl::{
 // Program ID
 //----------------------------------------
 
-declare_id!("2eAeUDN5EpxUB8ebCPu2HNnC9r1eJ3m2JSXGUWdxCMJg");
+declare_id!("Hz17BWNjrZXrVDjQxYXZGwhdCAQakmMBS5EcZfZxxvto");
 
 //----------------------------------------
 // Program Module
@@ -121,7 +121,10 @@ pub mod relay_escrow {
         let used_request = &mut ctx.accounts.used_request;
         let vault_bump = relay_escrow.vault_bump;
 
-        require!(!used_request.is_used, CustomError::RequestAlreadyUsed);
+        require!(
+            !used_request.is_used,
+            CustomError::TransferRequestAlreadyUsed
+        );
 
         let clock: Clock = Clock::get()?;
         require!(
@@ -418,8 +421,8 @@ pub struct DepositEvent {
 
 #[error_code]
 pub enum CustomError {
-    #[msg("Request has already been executed")]
-    RequestAlreadyUsed,
+    #[msg("Transfer request has already been executed")]
+    TransferRequestAlreadyUsed,
     #[msg("Invalid mint")]
     InvalidMint,
     #[msg("Unauthorized")]
