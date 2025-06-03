@@ -1,28 +1,29 @@
 use anchor_lang::{
     prelude::*,
     solana_program::{
-        program::invoke,
-        program::invoke_signed,
-        system_instruction,
         hash::{hash, Hash},
         instruction::Instruction,
-        sysvar,
+        program::invoke,
+        program::invoke_signed,
+        system_instruction, sysvar,
     },
 };
 
 use anchor_spl::{
+    associated_token::{AssociatedToken, Create},
     token::{self, Token, TokenAccount, Transfer},
-    associated_token::{AssociatedToken, Create}
 };
 
 //----------------------------------------
 // Program ID
 //----------------------------------------
-declare_id!("2eAeUDN5EpxUB8ebCPu2HNnC9r1eJ3m2JSXGUWdxCMJg");
+
+declare_id!("Hz17BWNjrZXrVDjQxYXZGwhdCAQakmMBS5EcZfZxxvto");
 
 //----------------------------------------
 // Program Module
 //----------------------------------------
+
 #[program]
 pub mod relay_escrow {
     use super::*;
@@ -48,8 +49,9 @@ pub mod relay_escrow {
         Ok(())
     }
 
-    // Deposit SOL to program vault
-    pub fn deposit_sol(ctx: Context<DepositSol>, amount: u64, id: [u8; 32]) -> Result<()> {
+    // Deposit native tokens
+    pub fn deposit_native(ctx: Context<DepositNative>, amount: u64, id: [u8; 32]) -> Result<()> {
+        // Transfer to vault
         invoke(
             &system_instruction::transfer(
                 ctx.accounts.depositor.key,
@@ -73,30 +75,24 @@ pub mod relay_escrow {
         Ok(())
     }
 
-    // Deposit SPL token to program vault
-    pub fn deposit_token(
-        ctx: Context<DepositToken>,
-        amount: u64,
-        id: [u8; 32],
-    ) -> Result<()> {
-        // Create ATA for vault if needed
+    // Deposit spl tokens
+    pub fn deposit_token(ctx: Context<DepositToken>, amount: u64, id: [u8; 32]) -> Result<()> {
+        // Create associated token account for the vault if needed
         if ctx.accounts.vault_token_account.data_is_empty() {
-            anchor_spl::associated_token::create(
-                CpiContext::new(
-                    ctx.accounts.associated_token_program.to_account_info(),
-                    Create {
-                        payer: ctx.accounts.depositor.to_account_info(),
-                        associated_token: ctx.accounts.vault_token_account.to_account_info(),
-                        authority: ctx.accounts.vault.to_account_info(),
-                        mint: ctx.accounts.mint.to_account_info(),
-                        system_program: ctx.accounts.system_program.to_account_info(),
-                        token_program: ctx.accounts.token_program.to_account_info(),
-                    },
-                ),
-            )?;
+            anchor_spl::associated_token::create(CpiContext::new(
+                ctx.accounts.associated_token_program.to_account_info(),
+                Create {
+                    payer: ctx.accounts.depositor.to_account_info(),
+                    associated_token: ctx.accounts.vault_token_account.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                    system_program: ctx.accounts.system_program.to_account_info(),
+                    token_program: ctx.accounts.token_program.to_account_info(),
+                },
+            ))?;
         }
 
-        // Transfer tokens to vault
+        // Transfer to vault
         token::transfer(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
@@ -120,14 +116,11 @@ pub mod relay_escrow {
     }
 
     // Execute transfer with allocator signature
-    pub fn execute_transfer(
-        ctx: Context<ExecuteTransfer>,
-        request: TransferRequest,
-    ) -> Result<()> {
+    pub fn execute_transfer(ctx: Context<ExecuteTransfer>, request: TransferRequest) -> Result<()> {
         let relay_escrow = &ctx.accounts.relay_escrow;
         let used_request = &mut ctx.accounts.used_request;
         let vault_bump = relay_escrow.vault_bump;
-        
+
         require!(!used_request.is_used, CustomError::RequestAlreadyUsed);
 
         let clock: Clock = Clock::get()?;
@@ -137,30 +130,30 @@ pub mod relay_escrow {
         );
 
         // Validate allocator signature
-        let cur_index:usize = sysvar::instructions::load_current_index_checked(&ctx.accounts.ix_sysvar)?.into();
+        let cur_index: usize =
+            sysvar::instructions::load_current_index_checked(&ctx.accounts.ix_sysvar)?.into();
         assert!(cur_index > 0, "cur_index should be greater than 0");
 
         let ed25519_instr_index = cur_index - 1;
-        let signature_ix = sysvar::instructions::load_instruction_at_checked(ed25519_instr_index, &ctx.accounts.ix_sysvar)?;
-        
-        validate_ed25519_signature_instruction(
-            &signature_ix,
-            &relay_escrow.allocator,
-            &request,
+        let signature_ix = sysvar::instructions::load_instruction_at_checked(
+            ed25519_instr_index,
+            &ctx.accounts.ix_sysvar,
         )?;
+
+        validate_ed25519_signature_instruction(&signature_ix, &relay_escrow.allocator, &request)?;
 
         used_request.is_used = true;
 
-        // Execute transfer based on token type
+        // Execute the transfer based on the token type
         match request.token {
-            // Transfer SOL
+            // Transfer native
             None => {
                 let vault_seeds: &[&[u8]] = &[b"vault", &[vault_bump]];
                 invoke_signed(
                     &system_instruction::transfer(
                         &ctx.accounts.vault.key(),
                         &ctx.accounts.recipient.key(),
-                        request.amount
+                        request.amount,
                     ),
                     &[
                         ctx.accounts.vault.to_account_info(),
@@ -170,20 +163,21 @@ pub mod relay_escrow {
                     &[vault_seeds],
                 )?;
             }
-            // Transfer SPL token
+            // Transfer token
             Some(token_mint) => {
-                let mint = ctx.accounts.mint.as_ref()
-                    .ok_or(CustomError::InvalidMint)?;
-                
-                require_keys_eq!(
-                    token_mint,
-                    mint.key(),
-                    CustomError::InvalidMint
-                );
+                let mint = ctx.accounts.mint.as_ref().ok_or(CustomError::InvalidMint)?;
 
-                let vault_token = ctx.accounts.vault_token_account.as_ref()
+                require_keys_eq!(token_mint, mint.key(), CustomError::InvalidMint);
+
+                let vault_token = ctx
+                    .accounts
+                    .vault_token_account
+                    .as_ref()
                     .ok_or(CustomError::InvalidMint)?;
-                let recipient_token = ctx.accounts.recipient_token_account.as_ref()
+                let recipient_token = ctx
+                    .accounts
+                    .recipient_token_account
+                    .as_ref()
                     .ok_or(CustomError::InvalidMint)?;
 
                 token::transfer(
@@ -214,6 +208,7 @@ pub mod relay_escrow {
 //----------------------------------------
 // Account Structures
 //----------------------------------------
+
 #[account]
 pub struct RelayEscrow {
     pub owner: Pubkey,
@@ -229,6 +224,7 @@ pub struct UsedRequest {
 //----------------------------------------
 // Instruction Contexts
 //----------------------------------------
+
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(
@@ -250,10 +246,10 @@ pub struct Initialize<'info> {
 
     #[account(mut)]
     pub owner: Signer<'info>,
-    
+
     /// CHECK: Used as public key only
     pub allocator: UncheckedAccount<'info>,
-    
+
     pub system_program: Program<'info, System>,
 }
 
@@ -265,17 +261,17 @@ pub struct SetAllocator<'info> {
 }
 
 #[derive(Accounts)]
-pub struct DepositSol<'info> {
+pub struct DepositNative<'info> {
     #[account(
         seeds = [b"relay_escrow"],
         bump
     )]
     pub relay_escrow: Account<'info, RelayEscrow>,
-    
+
     #[account(mut)]
     pub depositor: Signer<'info>,
 
-    /// CHECK: PDA vault for SOL
+    /// CHECK: PDA vault that will hold tokens
     #[account(
         mut,
         seeds = [b"vault"],
@@ -293,30 +289,30 @@ pub struct DepositToken<'info> {
         bump
     )]
     pub relay_escrow: Account<'info, RelayEscrow>,
-    
+
     #[account(mut)]
     pub depositor: Signer<'info>,
-    
+
     pub mint: Account<'info, token::Mint>,
-    
+
     #[account(
         mut,
         associated_token::mint = mint,
         associated_token::authority = depositor
     )]
     pub depositor_token_account: Account<'info, TokenAccount>,
-    
+
     /// CHECK: Will be initialized if needed
     #[account(mut)]
     pub vault_token_account: UncheckedAccount<'info>,
-    
+
     /// CHECK: PDA that will hold tokens
     #[account(
         seeds = [b"vault"],
         bump = relay_escrow.vault_bump
     )]
     pub vault: UncheckedAccount<'info>,
-    
+
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
@@ -326,15 +322,15 @@ pub struct DepositToken<'info> {
 #[instruction(request: TransferRequest)]
 pub struct ExecuteTransfer<'info> {
     pub relay_escrow: Account<'info, RelayEscrow>,
-    
+
     #[account(mut)]
     pub executor: Signer<'info>,
-    
+
     /// CHECK: Transfer recipient
     #[account(mut)]
     pub recipient: UncheckedAccount<'info>,
-    
-    /// CHECK: SOL vault PDA
+
+    /// CHECK: Native token vault PDA
     #[account(
         mut,
         seeds = [b"vault"],
@@ -343,21 +339,21 @@ pub struct ExecuteTransfer<'info> {
     pub vault: UncheckedAccount<'info>,
 
     pub mint: Option<Account<'info, token::Mint>>,
-    
+
     #[account(
         mut,
         associated_token::mint = mint,
         associated_token::authority = vault
     )]
     pub vault_token_account: Option<Account<'info, TokenAccount>>,
-    
+
     #[account(
         mut,
         associated_token::mint = mint,
         associated_token::authority = recipient
     )]
     pub recipient_token_account: Option<Account<'info, TokenAccount>>,
-    
+
     #[account(
         init,
         payer = executor,
@@ -369,7 +365,7 @@ pub struct ExecuteTransfer<'info> {
         bump
     )]
     pub used_request: Account<'info, UsedRequest>,
-    
+
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
@@ -381,10 +377,11 @@ pub struct ExecuteTransfer<'info> {
 //----------------------------------------
 // Custom Types
 //----------------------------------------
+
 #[derive(AnchorSerialize, AnchorDeserialize, Copy, Clone, PartialEq, Debug)]
 pub struct TransferRequest {
     pub recipient: Pubkey,
-    pub token: Option<Pubkey>,  // None for SOL, Some(mint) for SPL tokens
+    pub token: Option<Pubkey>, // None for native tokens, Some(mint) for spl tokens
     pub amount: u64,
     pub nonce: u64,
     pub expiration: i64,
@@ -399,6 +396,7 @@ impl TransferRequest {
 //----------------------------------------
 // Events
 //----------------------------------------
+
 #[event]
 pub struct TransferExecutedEvent {
     pub request: TransferRequest,
@@ -409,7 +407,7 @@ pub struct TransferExecutedEvent {
 #[event]
 pub struct DepositEvent {
     pub depositor: Pubkey,
-    pub token: Option<Pubkey>,  // None for SOL, Some(mint) for SPL tokens
+    pub token: Option<Pubkey>, // None for native tokens, Some(mint) for spl tokens
     pub amount: u64,
     pub id: [u8; 32],
 }
@@ -417,6 +415,7 @@ pub struct DepositEvent {
 //----------------------------------------
 // Error Definitions
 //----------------------------------------
+
 #[error_code]
 pub enum CustomError {
     #[msg("Request has already been executed")]
@@ -440,6 +439,7 @@ pub enum CustomError {
 //----------------------------------------
 // Helper Functions
 //----------------------------------------
+
 fn validate_ed25519_signature_instruction(
     signature_ix: &Instruction,
     expected_signer: &Pubkey,
@@ -453,11 +453,14 @@ fn validate_ed25519_signature_instruction(
     );
 
     let data = &signature_ix.data;
-    
+
     // Validate signature data structure
     require!(data.len() >= 99, CustomError::MalformedEd25519Data);
     require_eq!(data[0], 1, CustomError::MalformedEd25519Data);
-    require!(signature_ix.accounts.is_empty(), CustomError::MalformedEd25519Data);
+    require!(
+        signature_ix.accounts.is_empty(),
+        CustomError::MalformedEd25519Data
+    );
 
     // Extract and verify signer public key bytes
     let signer_pubkey = &signature_ix.data[16..16 + 32];
@@ -465,7 +468,7 @@ fn validate_ed25519_signature_instruction(
         signer_pubkey == expected_signer.to_bytes(),
         CustomError::AllocatorSignerMismatch
     );
-    
+
     // Verify message hash matches request hash
     let message_hash = &data[112..112 + 32];
     let expected_hash = expected_request.get_hash().to_bytes();
