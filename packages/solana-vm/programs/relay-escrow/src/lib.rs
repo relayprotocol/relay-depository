@@ -50,7 +50,7 @@ pub mod relay_escrow {
     }
 
     // Deposit native tokens
-    pub fn deposit_native(ctx: Context<DepositNative>, amount: u64, id: [u8; 32]) -> Result<()> {
+    pub fn deposit_native(ctx: Context<DepositNative>, amount: u64, id: [u8; 32], original_depositor: Option<Pubkey>) -> Result<()> {
         // Transfer to vault
         invoke(
             &system_instruction::transfer(
@@ -65,8 +65,9 @@ pub mod relay_escrow {
             ],
         )?;
 
+        let event_depositor = original_depositor.unwrap_or(ctx.accounts.depositor.key());
         emit!(DepositEvent {
-            depositor: ctx.accounts.depositor.key(),
+            depositor: event_depositor,
             token: None,
             amount,
             id,
@@ -76,7 +77,7 @@ pub mod relay_escrow {
     }
 
     // Deposit spl tokens
-    pub fn deposit_token(ctx: Context<DepositToken>, amount: u64, id: [u8; 32]) -> Result<()> {
+    pub fn deposit_token(ctx: Context<DepositToken>, amount: u64, id: [u8; 32], original_depositor: Option<Pubkey>) -> Result<()> {
         // Create associated token account for the vault if needed
         if ctx.accounts.vault_token_account.data_is_empty() {
             anchor_spl::associated_token::create(CpiContext::new(
@@ -105,8 +106,9 @@ pub mod relay_escrow {
             amount,
         )?;
 
+        let event_depositor = original_depositor.unwrap_or(ctx.accounts.depositor.key());
         emit!(DepositEvent {
-            depositor: ctx.accounts.depositor.key(),
+            depositor: event_depositor,
             token: Some(ctx.accounts.mint.key()),
             amount,
             id,

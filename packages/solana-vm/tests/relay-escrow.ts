@@ -218,7 +218,7 @@ describe("Relay Escrow", () => {
     const vaultBalanceBefore = await provider.connection.getBalance(vaultPDA);
 
     await program.methods
-      .depositNative(new anchor.BN(depositAmount), id)
+      .depositNative(new anchor.BN(depositAmount), id, user.publicKey)
       .accounts({
         relayEscrow: relayEscrowPDA,
         depositor: user.publicKey,
@@ -270,7 +270,7 @@ describe("Relay Escrow", () => {
 
       // Deposit tokens
       await program.methods
-        .depositToken(new anchor.BN(depositAmount), id)
+        .depositToken(new anchor.BN(depositAmount), id, user.publicKey)
         .accounts({
           relayEscrow: relayEscrowPDA,
           depositor: user.publicKey,
