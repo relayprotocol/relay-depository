@@ -148,9 +148,10 @@ describe("relay-forwarder", () => {
     const id = Array.from(anchor.web3.Keypair.generate().publicKey.toBytes());
 
     const handle = forwarderProgram.methods
-      .forwardNative(id, depositor.publicKey)
+      .forwardNative(id)
       .accounts({
         forwarder: forwarder.publicKey,
+        depositor: depositor.publicKey,
         relayEscrow,
         relayVault: vault,
         relayEscrowProgram: escrowProgram.programId,
@@ -227,9 +228,10 @@ describe("relay-forwarder", () => {
     const depositAmount = 1_000_000_000;
 
     const forwardDepositTx = await forwarderProgram.methods
-      .forwardToken(id, depositor.publicKey, false)
+      .forwardToken(id, false)
       .accounts({
         forwarder: forwarder.publicKey,
+        depositor: depositor.publicKey,
         relayEscrow,
         relayVault: vault,
         mint,
@@ -364,9 +366,10 @@ describe("relay-forwarder", () => {
   
     // Forward wSOL and close account
     await forwarderProgram.methods
-      .forwardToken(id, depositor.publicKey, true) // true to close account
+      .forwardToken(id, true) // true to close account
       .accounts({
         forwarder: wsolForwarder.publicKey,
+        depositor: depositor.publicKey,
         relayEscrow,
         relayVault: vault,
         mint: NATIVE_MINT,
@@ -414,9 +417,10 @@ describe("relay-forwarder", () => {
     const depositorBalanceBefore = await provider.connection.getBalance(emptyAccount.publicKey);
     try {
       await forwarderProgram.methods
-        .forwardNative(id, depositor.publicKey)
+        .forwardNative(id)
         .accounts({
           forwarder: emptyAccount.publicKey,
+          depositor: emptyAccount.publicKey,
           relayEscrow,
           relayVault: vault,
           relayEscrowProgram: escrowProgram.programId,

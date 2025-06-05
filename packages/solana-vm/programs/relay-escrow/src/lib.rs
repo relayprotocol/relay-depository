@@ -50,24 +50,23 @@ pub mod relay_escrow {
     }
 
     // Deposit native tokens
-    pub fn deposit_native(ctx: Context<DepositNative>, amount: u64, id: [u8; 32], original_depositor: Option<Pubkey>) -> Result<()> {
+    pub fn deposit_native(ctx: Context<DepositNative>, amount: u64, id: [u8; 32]) -> Result<()> {
         // Transfer to vault
         invoke(
             &system_instruction::transfer(
-                ctx.accounts.depositor.key,
+                ctx.accounts.sender.key,
                 &ctx.accounts.vault.key(),
                 amount,
             ),
             &[
-                ctx.accounts.depositor.to_account_info(),
+                ctx.accounts.sender.to_account_info(),
                 ctx.accounts.vault.to_account_info(),
                 ctx.accounts.system_program.to_account_info(),
             ],
         )?;
 
-        let event_depositor = original_depositor.unwrap_or(ctx.accounts.depositor.key());
         emit!(DepositEvent {
-            depositor: event_depositor,
+            depositor: ctx.accounts.depositor.key(),
             token: None,
             amount,
             id,
@@ -77,13 +76,13 @@ pub mod relay_escrow {
     }
 
     // Deposit spl tokens
-    pub fn deposit_token(ctx: Context<DepositToken>, amount: u64, id: [u8; 32], original_depositor: Option<Pubkey>) -> Result<()> {
+    pub fn deposit_token(ctx: Context<DepositToken>, amount: u64, id: [u8; 32]) -> Result<()> {
         // Create associated token account for the vault if needed
         if ctx.accounts.vault_token_account.data_is_empty() {
             anchor_spl::associated_token::create(CpiContext::new(
                 ctx.accounts.associated_token_program.to_account_info(),
                 Create {
-                    payer: ctx.accounts.depositor.to_account_info(),
+                    payer: ctx.accounts.sender.to_account_info(),
                     associated_token: ctx.accounts.vault_token_account.to_account_info(),
                     authority: ctx.accounts.vault.to_account_info(),
                     mint: ctx.accounts.mint.to_account_info(),
@@ -98,17 +97,16 @@ pub mod relay_escrow {
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
                 Transfer {
-                    from: ctx.accounts.depositor_token_account.to_account_info(),
+                    from: ctx.accounts.sender_token_account.to_account_info(),
                     to: ctx.accounts.vault_token_account.to_account_info(),
-                    authority: ctx.accounts.depositor.to_account_info(),
+                    authority: ctx.accounts.sender.to_account_info(),
                 },
             ),
             amount,
         )?;
 
-        let event_depositor = original_depositor.unwrap_or(ctx.accounts.depositor.key());
         emit!(DepositEvent {
-            depositor: event_depositor,
+            depositor: ctx.accounts.depositor.key(),
             token: Some(ctx.accounts.mint.key()),
             amount,
             id,
@@ -123,7 +121,10 @@ pub mod relay_escrow {
         let used_request = &mut ctx.accounts.used_request;
         let vault_bump = relay_escrow.vault_bump;
 
-        require!(!used_request.is_used, CustomError::RequestAlreadyUsed);
+        require!(
+            !used_request.is_used,
+            CustomError::TransferRequestAlreadyUsed
+        );
 
         let clock: Clock = Clock::get()?;
         require!(
@@ -271,7 +272,10 @@ pub struct DepositNative<'info> {
     pub relay_escrow: Account<'info, RelayEscrow>,
 
     #[account(mut)]
-    pub depositor: Signer<'info>,
+    pub sender: Signer<'info>,
+
+    /// CHECK: Used as public key only
+    pub depositor: UncheckedAccount<'info>,
 
     /// CHECK: PDA vault that will hold tokens
     #[account(
@@ -292,17 +296,20 @@ pub struct DepositToken<'info> {
     )]
     pub relay_escrow: Account<'info, RelayEscrow>,
 
-    #[account(mut)]
-    pub depositor: Signer<'info>,
-
     pub mint: Account<'info, token::Mint>,
+
+    #[account(mut)]
+    pub sender: Signer<'info>,
 
     #[account(
         mut,
         associated_token::mint = mint,
-        associated_token::authority = depositor
+        associated_token::authority = sender
     )]
-    pub depositor_token_account: Account<'info, TokenAccount>,
+    pub sender_token_account: Account<'info, TokenAccount>,
+
+    /// CHECK: Used as public key only
+    pub depositor: UncheckedAccount<'info>,
 
     /// CHECK: Will be initialized if needed
     #[account(mut)]
@@ -420,8 +427,8 @@ pub struct DepositEvent {
 
 #[error_code]
 pub enum CustomError {
-    #[msg("Request has already been executed")]
-    RequestAlreadyUsed,
+    #[msg("Transfer request has already been executed")]
+    TransferRequestAlreadyUsed,
     #[msg("Invalid mint")]
     InvalidMint,
     #[msg("Unauthorized")]

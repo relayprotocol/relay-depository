@@ -17,7 +17,6 @@ pub mod relay_forwarder {
     pub fn forward_native(
         ctx: Context<ForwardNative>, 
         id: [u8; 32], 
-        original_depositor: Pubkey,
     ) -> Result<()> {
         let amount = ctx.accounts.forwarder.lamports();
         require!(amount > 0, ForwarderError::InsufficientBalance);
@@ -28,7 +27,6 @@ pub mod relay_forwarder {
             ),
             amount,
             id,
-            Some(original_depositor)
         )?;
 
         Ok(())
@@ -38,7 +36,6 @@ pub mod relay_forwarder {
     pub fn forward_token(
         ctx: Context<ForwardToken>, 
         id: [u8; 32], 
-        original_depositor: Pubkey,
         should_close: bool,
     ) -> Result<()> {
         let forwarder_token_balance = ctx.accounts.forwarder_token_account.amount;
@@ -50,7 +47,6 @@ pub mod relay_forwarder {
             ),
             forwarder_token_balance,
             id,
-            Some(original_depositor)
         )?;
 
         if should_close {
@@ -73,12 +69,14 @@ pub mod relay_forwarder {
 #[derive(Accounts)]
 #[instruction(
     id: [u8; 32],
-    original_depositor: Pubkey,
 )]
 pub struct ForwardNative<'info> {
     // The forwarder account that holds and will send the SOL
     #[account(mut)]
     pub forwarder: Signer<'info>,
+
+    /// CHECK: Used as public key only
+    pub depositor: UncheckedAccount<'info>,
 
     /// CHECK: Relay escrow program account
     pub relay_escrow: UncheckedAccount<'info>,
@@ -98,7 +96,8 @@ impl<'info> ForwardNative<'info> {
     fn into_deposit_accounts(&self) -> relay_escrow::cpi::accounts::DepositNative<'info> {
         relay_escrow::cpi::accounts::DepositNative {
             relay_escrow: self.relay_escrow.to_account_info(),
-            depositor: self.forwarder.to_account_info(),
+            depositor: self.depositor.to_account_info(),
+            sender: self.forwarder.to_account_info(),
             vault: self.relay_vault.to_account_info(),
             system_program: self.system_program.to_account_info(),
         }
@@ -109,12 +108,14 @@ impl<'info> ForwardNative<'info> {
 #[derive(Accounts)]
 #[instruction(
     id: [u8; 32],
-    original_depositor: Pubkey,
 )]
 pub struct ForwardToken<'info> {
     // The forwarder account that holds and will send the tokens
     #[account(mut)]
     pub forwarder: Signer<'info>,
+
+    /// CHECK: Used as public key only
+    pub depositor: UncheckedAccount<'info>,
 
     /// CHECK: Relay escrow program account
     pub relay_escrow: UncheckedAccount<'info>,
@@ -148,9 +149,10 @@ impl<'info> ForwardToken<'info> {
     fn into_deposit_accounts(&self) -> relay_escrow::cpi::accounts::DepositToken<'info> {
         relay_escrow::cpi::accounts::DepositToken {
             relay_escrow: self.relay_escrow.to_account_info(),
-            depositor: self.forwarder.to_account_info(),
+            depositor: self.depositor.to_account_info(),
+            sender: self.forwarder.to_account_info(),
             mint: self.mint.to_account_info(),
-            depositor_token_account: self.forwarder_token_account.to_account_info(),
+            sender_token_account: self.forwarder_token_account.to_account_info(),
             vault_token_account: self.relay_vault_token.to_account_info(),
             vault: self.relay_vault.to_account_info(),
             token_program: self.token_program.to_account_info(),
