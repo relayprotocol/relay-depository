@@ -11,6 +11,9 @@ wallet = "~/.config/solana/id.json"
 
 [programs.localnet]
 relay_escrow = "H7BhnmRd2wjuifbDRzjVMNZoXM7Y1qXh2cRAD24tQFr"
+relay_forwarder = "FEdx57eQ7pATqyPNZnW3EWBdhvfapXBz4WMo2Qk5Cm6h"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+test-forwarder = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/relay-forwarder.ts"
+test-escrow = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/relay-escrow.ts"
