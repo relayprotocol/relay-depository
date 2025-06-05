@@ -1,9 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program, BN } from "@coral-xyz/anchor";
-import { RelayForwarder } from "../target/types/relay_forwarder";
-import { RelayEscrow } from "../target/types/relay_escrow";
-import { 
-  TOKEN_PROGRAM_ID, 
+import {
+  TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   createMint,
   createAssociatedTokenAccount,
@@ -16,23 +14,26 @@ import {
 } from "@solana/spl-token";
 import { assert } from "chai";
 
+import { RelayForwarder } from "../target/types/relay_forwarder";
+import { RelayEscrow } from "../target/types/relay_escrow";
+
 describe("relay-forwarder", () => {
   // Configure the client to use the local cluster
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const forwarderProgram = anchor.workspace.RelayForwarder as Program<RelayForwarder>;
+  const forwarderProgram = anchor.workspace
+    .RelayForwarder as Program<RelayForwarder>;
   const escrowProgram = anchor.workspace.RelayEscrow as Program<RelayEscrow>;
 
   const wallet = provider.wallet as anchor.Wallet;
-  
+
   // Test accounts
   const depositor = anchor.web3.Keypair.generate();
   const forwarder = anchor.web3.Keypair.generate();
   let mint: anchor.web3.PublicKey;
-  let depositorAta: anchor.web3.PublicKey;
   let forwarderAta: anchor.web3.PublicKey;
-  
+
   // PDAs
   let relayEscrow: anchor.web3.PublicKey;
   let vault: anchor.web3.PublicKey;
@@ -50,11 +51,13 @@ describe("relay-forwarder", () => {
       provider.connection.requestAirdrop(
         forwarder.publicKey,
         10 * anchor.web3.LAMPORTS_PER_SOL
-      )
+      ),
     ];
 
     const signatures = await Promise.all(airdropPromises);
-    await Promise.all(signatures.map(sig => provider.connection.confirmTransaction(sig)));
+    await Promise.all(
+      signatures.map((sig) => provider.connection.confirmTransaction(sig))
+    );
 
     // Get PDAs for relay-escrow
     [relayEscrow] = anchor.web3.PublicKey.findProgramAddressSync(
@@ -67,17 +70,17 @@ describe("relay-forwarder", () => {
       escrowProgram.programId
     );
 
-    // Initialize relay-escrow
-    await escrowProgram.methods
-      .initialize()
-      .accounts({
-        relayEscrow,
-        vault,
-        owner: wallet.publicKey,
-        allocator: wallet.publicKey,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .rpc();
+    // Initialize relay-escrow (only needed if running this test individually)
+    // await escrowProgram.methods
+    //   .initialize()
+    //   .accountsPartial({
+    //     relayEscrow,
+    //     vault,
+    //     owner: wallet.publicKey,
+    //     allocator: wallet.publicKey,
+    //     systemProgram: anchor.web3.SystemProgram.programId,
+    //   })
+    //   .rpc();
 
     // Create test token
     mint = await createMint(
@@ -86,14 +89,6 @@ describe("relay-forwarder", () => {
       wallet.publicKey,
       null,
       9
-    );
-
-    // Create depositor's token account (not used for transfer, just for references)
-    depositorAta = await createAssociatedTokenAccount(
-      provider.connection,
-      wallet.payer,
-      mint,
-      depositor.publicKey
     );
 
     // Create forwarder's token account (used for actual transfers)
@@ -115,11 +110,7 @@ describe("relay-forwarder", () => {
     );
 
     // Get vault's token account address
-    vaultAta = await getAssociatedTokenAddress(
-      mint,
-      vault,
-      true
-    );
+    vaultAta = await getAssociatedTokenAddress(mint, vault, true);
 
     // Create vault token account if it doesn't exist
     try {
@@ -128,28 +119,30 @@ describe("relay-forwarder", () => {
       // Create the vault token account
       const tx = new anchor.web3.Transaction().add(
         createAssociatedTokenAccountInstruction(
-          wallet.publicKey,  // payer
-          vaultAta,          // associated token account address
-          vault,             // owner
-          mint               // token mint
+          wallet.publicKey, // payer
+          vaultAta, // associated token account address
+          vault, // owner
+          mint // token mint
         )
       );
       await provider.sendAndConfirm(tx);
     }
   });
 
-  it("Forward native SOL successfully", async () => {
+  it("Forward native", async () => {
     // Get initial balances
     const vaultBalanceBefore = await provider.connection.getBalance(vault);
-    const forwarderBalanceBefore = await provider.connection.getBalance(forwarder.publicKey);
-    
+    const forwarderBalanceBefore = await provider.connection.getBalance(
+      forwarder.publicKey
+    );
+
     const depositAmount = 10 * anchor.web3.LAMPORTS_PER_SOL;
-    
+
     const id = Array.from(anchor.web3.Keypair.generate().publicKey.toBytes());
 
     const handle = forwarderProgram.methods
       .forwardNative(id)
-      .accounts({
+      .accountsPartial({
         forwarder: forwarder.publicKey,
         depositor: depositor.publicKey,
         relayEscrow,
@@ -164,9 +157,12 @@ describe("relay-forwarder", () => {
     // Wait for transaction confirmation
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
-    const depositTxTransaction = await provider.connection.getParsedTransaction(depositTx, {
-      commitment: "confirmed",
-    });
+    const depositTxTransaction = await provider.connection.getParsedTransaction(
+      depositTx,
+      {
+        commitment: "confirmed",
+      }
+    );
     let events: any[] = [];
     for (const logMessage of depositTxTransaction?.meta?.logMessages || []) {
       if (!logMessage.startsWith("Program data: ")) {
@@ -180,24 +176,25 @@ describe("relay-forwarder", () => {
       }
     }
 
-    const DepositEvent = events.find(event => event.name === "DepositEvent");
-    assert(DepositEvent);
-    
+    const DepositEvent = events.find((event) => event.name === "depositEvent");
+    assert.exists(DepositEvent);
+
     assert.equal(DepositEvent?.data.amount.toNumber(), depositAmount);
-    assert.equal(DepositEvent?.data.depositor.toBase58(), depositor.publicKey.toBase58());
+    assert.equal(
+      DepositEvent?.data.depositor.toBase58(),
+      depositor.publicKey.toBase58()
+    );
     assert.equal(DepositEvent?.data.id.toString(), id.toString());
-    
+
     // Verify balances
     const vaultBalanceAfter = await provider.connection.getBalance(vault);
-    const forwarderBalanceAfter = await provider.connection.getBalance(forwarder.publicKey);
+    const forwarderBalanceAfter = await provider.connection.getBalance(
+      forwarder.publicKey
+    );
 
     // Check vault received the expected amount
     const vaultChange = vaultBalanceAfter - vaultBalanceBefore;
-    assert.isAbove(
-      vaultChange,
-      0,
-      "Vault balance should increase"
-    );
+    assert.isAbove(vaultChange, 0, "Vault balance should increase");
 
     assert.equal(
       vaultChange,
@@ -207,29 +204,27 @@ describe("relay-forwarder", () => {
 
     // Check forwarder sent the expected amount (including fees)
     const forwarderChange = forwarderBalanceBefore - forwarderBalanceAfter;
-    assert.isAbove(
-      forwarderChange,
-      0,
-      "Forwarder balance should decrease"
-    );
+    assert.isAbove(forwarderChange, 0, "Forwarder balance should decrease");
   });
 
-  it("Forward SPL token successfully", async () => {
+  it("Forward token", async () => {
     const id = Array.from(anchor.web3.Keypair.generate().publicKey.toBytes());
 
     // Get initial balances
-    const vaultTokenBalanceBefore = await provider.connection.getTokenAccountBalance(vaultAta)
-      .then(res => res.value.amount)
+    const vaultTokenBalanceBefore = await provider.connection
+      .getTokenAccountBalance(vaultAta)
+      .then((res) => res.value.amount)
       .catch(() => "0");
-    
-    const forwarderTokenBalanceBefore = await provider.connection.getTokenAccountBalance(forwarderAta)
-      .then(res => res.value.amount);
+
+    const forwarderTokenBalanceBefore = await provider.connection
+      .getTokenAccountBalance(forwarderAta)
+      .then((res) => res.value.amount);
 
     const depositAmount = 1_000_000_000;
 
     const forwardDepositTx = await forwarderProgram.methods
       .forwardToken(id, false)
-      .accounts({
+      .accountsPartial({
         forwarder: forwarder.publicKey,
         depositor: depositor.publicKey,
         relayEscrow,
@@ -245,12 +240,14 @@ describe("relay-forwarder", () => {
       .signers([forwarder])
       .rpc();
 
-    
     // Wait for transaction confirmation
     await new Promise((resolve) => setTimeout(resolve, 3000));
-    const depositTxTransaction = await provider.connection.getParsedTransaction(forwardDepositTx, {
-      commitment: "confirmed",
-    });
+    const depositTxTransaction = await provider.connection.getParsedTransaction(
+      forwardDepositTx,
+      {
+        commitment: "confirmed",
+      }
+    );
     let events: any[] = [];
     for (const logMessage of depositTxTransaction?.meta?.logMessages || []) {
       if (!logMessage.startsWith("Program data: ")) {
@@ -264,20 +261,25 @@ describe("relay-forwarder", () => {
       }
     }
 
-    const DepositEvent = events.find(event => event.name === "DepositEvent");
-    assert(DepositEvent);
+    const DepositEvent = events.find((event) => event.name === "depositEvent");
+    assert.exists(DepositEvent);
 
     assert.equal(DepositEvent?.data.amount.toNumber(), depositAmount);
-    assert.equal(DepositEvent?.data.depositor.toBase58(), depositor.publicKey.toBase58());
+    assert.equal(
+      DepositEvent?.data.depositor.toBase58(),
+      depositor.publicKey.toBase58()
+    );
     assert.equal(DepositEvent?.data.id.toString(), id.toString());
     assert.equal(DepositEvent?.data.token.toBase58(), mint.toBase58());
 
     // Verify token balances
-    const vaultTokenBalanceAfter = await provider.connection.getTokenAccountBalance(vaultAta)
-      .then(res => res.value.amount);
-    
-    const forwarderTokenBalanceAfter = await provider.connection.getTokenAccountBalance(forwarderAta)
-      .then(res => res.value.amount);
+    const vaultTokenBalanceAfter = await provider.connection
+      .getTokenAccountBalance(vaultAta)
+      .then((res) => res.value.amount);
+
+    const forwarderTokenBalanceAfter = await provider.connection
+      .getTokenAccountBalance(forwarderAta)
+      .then((res) => res.value.amount);
 
     // Check vault received all tokens
     assert.equal(
@@ -294,17 +296,17 @@ describe("relay-forwarder", () => {
     );
   });
 
-  it("Forward wSOL and close account successfully", async () => {
+  it("Forward wrapped-native and close account successfully", async () => {
     // Create new forwarder for this test
     const wsolForwarder = anchor.web3.Keypair.generate();
-    
+
     // Airdrop SOL to wsolForwarder
     const signature = await provider.connection.requestAirdrop(
       wsolForwarder.publicKey,
       2 * anchor.web3.LAMPORTS_PER_SOL
     );
     await provider.connection.confirmTransaction(signature);
-  
+
     // Create wSOL account for forwarder
     const wsolForwarderAta = await createAssociatedTokenAccount(
       provider.connection,
@@ -312,7 +314,7 @@ describe("relay-forwarder", () => {
       NATIVE_MINT,
       wsolForwarder.publicKey
     );
-  
+
     // Wrap 1 SOL to wSOL
     const wrapAmount = 1 * anchor.web3.LAMPORTS_PER_SOL;
     const wrapIx = anchor.web3.SystemProgram.transfer({
@@ -320,22 +322,20 @@ describe("relay-forwarder", () => {
       toPubkey: wsolForwarderAta,
       lamports: wrapAmount,
     });
-    
+
     const syncNativeIx = createSyncNativeInstruction(wsolForwarderAta);
-    
-    const wrapTx = new anchor.web3.Transaction()
-      .add(wrapIx)
-      .add(syncNativeIx);
-    
+
+    const wrapTx = new anchor.web3.Transaction().add(wrapIx).add(syncNativeIx);
+
     await provider.sendAndConfirm(wrapTx, [wsolForwarder]);
-  
+
     // Get vault's wSOL account
     const vaultWsolAta = await getAssociatedTokenAddress(
       NATIVE_MINT,
       vault,
       true
     );
-  
+
     // Create vault wSOL account if doesn't exist
     try {
       await getAccount(provider.connection, vaultWsolAta);
@@ -350,24 +350,29 @@ describe("relay-forwarder", () => {
       );
       await provider.sendAndConfirm(tx);
     }
-  
+
     // Get initial balances
-    const forwarderSolBefore = await provider.connection.getBalance(wsolForwarder.publicKey);
-    const forwarderWsolBefore = await provider.connection.getTokenAccountBalance(wsolForwarderAta)
-      .then(res => new BN(res.value.amount));
-    const vaultWsolBefore = await provider.connection.getTokenAccountBalance(vaultWsolAta)
-      .then(res => new BN(res.value.amount))
+    const forwarderSolBefore = await provider.connection.getBalance(
+      wsolForwarder.publicKey
+    );
+    const forwarderWsolBefore = await provider.connection
+      .getTokenAccountBalance(wsolForwarderAta)
+      .then((res) => new BN(res.value.amount));
+    const vaultWsolBefore = await provider.connection
+      .getTokenAccountBalance(vaultWsolAta)
+      .then((res) => new BN(res.value.amount))
       .catch(() => new BN(0));
-  
+
     // Calculate expected rent fee to be returned
-    const rentExemptBalance = await provider.connection.getMinimumBalanceForRentExemption(165); // Token account size
-  
+    const rentExemptBalance =
+      await provider.connection.getMinimumBalanceForRentExemption(165); // Token account size
+
     const id = Array.from(anchor.web3.Keypair.generate().publicKey.toBytes());
-  
+
     // Forward wSOL and close account
     await forwarderProgram.methods
       .forwardToken(id, true) // true to close account
-      .accounts({
+      .accountsPartial({
         forwarder: wsolForwarder.publicKey,
         depositor: depositor.publicKey,
         relayEscrow,
@@ -382,12 +387,15 @@ describe("relay-forwarder", () => {
       })
       .signers([wsolForwarder])
       .rpc();
-  
+
     // Get final balances
-    const forwarderSolAfter = await provider.connection.getBalance(wsolForwarder.publicKey);
-    const vaultWsolAfter = await provider.connection.getTokenAccountBalance(vaultWsolAta)
-      .then(res => new BN(res.value.amount));
-  
+    const forwarderSolAfter = await provider.connection.getBalance(
+      wsolForwarder.publicKey
+    );
+    const vaultWsolAfter = await provider.connection
+      .getTokenAccountBalance(vaultWsolAta)
+      .then((res) => new BN(res.value.amount));
+
     // Verify wSOL account is closed
     try {
       await getAccount(provider.connection, wsolForwarderAta);
@@ -395,14 +403,14 @@ describe("relay-forwarder", () => {
     } catch (err) {
       assert.include(err.toString(), "TokenAccountNotFoundError");
     }
-  
+
     // Verify forwarder received rent fee back
     assert.equal(
       forwarderSolAfter - forwarderSolBefore,
       rentExemptBalance,
       "Forwarder should receive rent fee back"
     );
-  
+
     // Verify vault received all wSOL
     assert.equal(
       vaultWsolAfter.sub(vaultWsolBefore).toString(),
@@ -414,11 +422,11 @@ describe("relay-forwarder", () => {
   it("Should fail with insufficient balance", async () => {
     const emptyAccount = anchor.web3.Keypair.generate();
     const id = Array.from(anchor.web3.Keypair.generate().publicKey.toBytes());
-    const depositorBalanceBefore = await provider.connection.getBalance(emptyAccount.publicKey);
+
     try {
       await forwarderProgram.methods
         .forwardNative(id)
-        .accounts({
+        .accountsPartial({
           forwarder: emptyAccount.publicKey,
           depositor: emptyAccount.publicKey,
           relayEscrow,

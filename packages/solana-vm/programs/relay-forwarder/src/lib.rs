@@ -1,29 +1,25 @@
-use anchor_lang::{
-    prelude::*,
-};
+use anchor_lang::prelude::*;
 use anchor_spl::{
-    token::{self, Token, TokenAccount, CloseAccount},
-    associated_token::{AssociatedToken},
+    associated_token::AssociatedToken,
+    token::{self, CloseAccount, Token, TokenAccount},
 };
-use relay_escrow;
+use relay_escrow::program::RelayEscrow;
 
-declare_id!("59kWzbSz2BdgqNFf3GEFsD4NW7eAu6woM947ZWeiE1oN");
+declare_id!("FEdx57eQ7pATqyPNZnW3EWBdhvfapXBz4WMo2Qk5Cm6h");
 
 #[program]
 pub mod relay_forwarder {
     use super::*;
 
-    /// Forwards native SOL from the forwarder account to the relay escrow vault
-    pub fn forward_native(
-        ctx: Context<ForwardNative>, 
-        id: [u8; 32], 
-    ) -> Result<()> {
+    /// Forwards native tokens from the forwarder account to the relay escrow vault
+    pub fn forward_native(ctx: Context<ForwardNative>, id: [u8; 32]) -> Result<()> {
         let amount = ctx.accounts.forwarder.lamports();
         require!(amount > 0, ForwarderError::InsufficientBalance);
+
         relay_escrow::cpi::deposit_native(
             CpiContext::new(
                 ctx.accounts.relay_escrow_program.to_account_info(),
-                ctx.accounts.into_deposit_accounts()
+                ctx.accounts.into_deposit_accounts(),
             ),
             amount,
             id,
@@ -32,18 +28,22 @@ pub mod relay_forwarder {
         Ok(())
     }
 
-    /// Forwards SPL tokens from the forwarder's token account to the relay escrow vault token account
+    /// Forwards spl tokens from the forwarder's token account to the relay escrow vault token account
     pub fn forward_token(
-        ctx: Context<ForwardToken>, 
-        id: [u8; 32], 
+        ctx: Context<ForwardToken>,
+        id: [u8; 32],
         should_close: bool,
     ) -> Result<()> {
         let forwarder_token_balance = ctx.accounts.forwarder_token_account.amount;
-        require!(forwarder_token_balance > 0, ForwarderError::InsufficientBalance);
+        require!(
+            forwarder_token_balance > 0,
+            ForwarderError::InsufficientBalance
+        );
+
         relay_escrow::cpi::deposit_token(
             CpiContext::new(
                 ctx.accounts.relay_escrow_program.to_account_info(),
-                ctx.accounts.into_deposit_accounts()
+                ctx.accounts.into_deposit_accounts(),
             ),
             forwarder_token_balance,
             id,
@@ -65,13 +65,13 @@ pub mod relay_forwarder {
     }
 }
 
-// Account structure for forwarding native SOL
+// Account structure for forwarding native tokens
 #[derive(Accounts)]
 #[instruction(
     id: [u8; 32],
 )]
 pub struct ForwardNative<'info> {
-    // The forwarder account that holds and will send the SOL
+    // The forwarder account that holds and will send the tokens
     #[account(mut)]
     pub forwarder: Signer<'info>,
 
@@ -90,9 +90,8 @@ pub struct ForwardNative<'info> {
 }
 
 impl<'info> ForwardNative<'info> {
-
-    /// Converts ForwardNative accounts into relay_escrow::cpi::accounts::DepositNative accounts
-    /// for use in CPI calls to the relay_escrow program
+    /// Converts `ForwardNative` accounts into `relay_escrow::cpi::accounts::DepositNative`
+    /// accounts for use in cross-program-invocation calls to the `relay_escrow`` program
     fn into_deposit_accounts(&self) -> relay_escrow::cpi::accounts::DepositNative<'info> {
         relay_escrow::cpi::accounts::DepositNative {
             relay_escrow: self.relay_escrow.to_account_info(),
@@ -104,7 +103,7 @@ impl<'info> ForwardNative<'info> {
     }
 }
 
-// Account structure for forwarding SPL tokens
+// Account structure for forwarding spl tokens
 #[derive(Accounts)]
 #[instruction(
     id: [u8; 32],
@@ -143,9 +142,8 @@ pub struct ForwardToken<'info> {
 }
 
 impl<'info> ForwardToken<'info> {
-
-    /// Converts ForwardToken accounts into relay_escrow::cpi::accounts::DepositToken accounts
-    /// for use in CPI calls to the relay_escrow program
+    /// Converts `ForwardToken` accounts into `relay_escrow::cpi::accounts::DepositToken`
+    /// accounts for use in cross-program-invocation calls to the `relay_escrow`` program
     fn into_deposit_accounts(&self) -> relay_escrow::cpi::accounts::DepositToken<'info> {
         relay_escrow::cpi::accounts::DepositToken {
             relay_escrow: self.relay_escrow.to_account_info(),
