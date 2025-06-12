@@ -1,6 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import {
   TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   createMint,
   createAssociatedTokenAccount,
@@ -28,7 +29,10 @@ describe("Relay Escrow", () => {
   const program = anchor.workspace.RelayEscrow as anchor.Program<RelayEscrow>;
 
   // Test accounts
-  const owner = Keypair.generate();
+  const fakeOwner = Keypair.generate();
+  const owner = Keypair.fromSecretKey(
+    Buffer.from('5223911e0fbfb0b8d5880ebea5711d5d7754387950c08b52c0eaf127facebd455e28ef570e8aed9ecef8a89f5c1a90739080c05df9e9c8ca082376ef93a02b2e', 'hex')
+  );
   const allocator = Keypair.generate();
   const user = Keypair.generate();
   const recipient = Keypair.generate();
@@ -45,12 +49,25 @@ describe("Relay Escrow", () => {
   let vaultTokenAccount: PublicKey;
   let recipientTokenAccount: PublicKey;
 
+  // SPL Token 2022 test accounts
+  let mint2022Keypair: Keypair;
+  let mint2022Pubkey: PublicKey;
+  let user2022TokenAccount: PublicKey;
+  let vault2022TokenAccount: PublicKey;
+  let recipient2022TokenAccount: PublicKey;
+
   before(async () => {
     // Airdrop SOL to test accounts
     await provider.connection.confirmTransaction(
       await provider.connection.requestAirdrop(
         owner.publicKey,
         10 * LAMPORTS_PER_SOL
+      )
+    );
+    await provider.connection.confirmTransaction(
+      await provider.connection.requestAirdrop(
+        fakeOwner.publicKey,
+        2 * LAMPORTS_PER_SOL
       )
     );
     await provider.connection.confirmTransaction(
@@ -82,12 +99,33 @@ describe("Relay Escrow", () => {
       mintKeypair
     );
 
+    mint2022Keypair = Keypair.generate();
+    mint2022Pubkey = await createMint(
+      provider.connection,
+      owner,
+      owner.publicKey,
+      null,
+      9,
+      mint2022Keypair,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
+
     // Create token accounts
     userTokenAccount = await createAssociatedTokenAccount(
       provider.connection,
       owner,
       mintPubkey,
       user.publicKey
+    );
+
+    user2022TokenAccount = await createAssociatedTokenAccount(
+      provider.connection,
+      owner,
+      mint2022Pubkey,
+      user.publicKey,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
     );
 
     // Get vault token account address
@@ -97,11 +135,27 @@ describe("Relay Escrow", () => {
       true // allowOwnerOffCurve - this is important for PDA
     );
 
+    vault2022TokenAccount = await getAssociatedTokenAddress(
+      mint2022Pubkey,
+      vaultPDA,
+      true, // allowOwnerOffCurve - this is important for PDA
+      TOKEN_2022_PROGRAM_ID
+    );
+
     recipientTokenAccount = await createAssociatedTokenAccount(
       provider.connection,
       owner,
       mintPubkey,
       recipient.publicKey
+    );
+
+    recipient2022TokenAccount = await createAssociatedTokenAccount(
+      provider.connection,
+      owner,
+      mint2022Pubkey,
+      recipient.publicKey,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
     );
 
     // Mint tokens to user
@@ -113,9 +167,41 @@ describe("Relay Escrow", () => {
       owner,
       100 * LAMPORTS_PER_SOL
     );
+
+    await mintTo(
+      provider.connection,
+      owner,
+      mint2022Pubkey,
+      user2022TokenAccount,
+      owner,
+      100 * LAMPORTS_PER_SOL,
+      [],
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
   });
 
-  it("Initialize", async () => {
+  it("Initialize with none-owner should fail", async () => {
+    try {
+      await program.methods
+        .initialize()
+        .accountsPartial({
+          relayEscrow: relayEscrowPDA,
+          vault: vaultPDA,
+          owner: fakeOwner.publicKey,
+          allocator: allocator.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([fakeOwner])
+        .rpc();
+        
+      assert.fail("Should have thrown error");
+    } catch (err) {
+      assert.include(err.message, "Unauthorized");
+    }
+  });
+
+  it("Should successfully initialize with correct owner", async () => {
     try {
       await program.methods
         .initialize()
@@ -313,6 +399,120 @@ describe("Relay Escrow", () => {
     }
   });
 
+  it("Deposit token2022", async () => {
+    const depositAmount = LAMPORTS_PER_SOL;
+    const id = Array.from(Buffer.alloc(32, 3));
+  
+    const userBalanceBefore =
+      await provider.connection.getTokenAccountBalance(user2022TokenAccount);
+
+    // Create vault token account if it doesn't exist
+    try {
+      await createAssociatedTokenAccount(
+        provider.connection,
+        owner,
+        mint2022Pubkey,
+        vaultPDA,
+        undefined,
+        TOKEN_2022_PROGRAM_ID 
+      );
+    } catch {
+    }
+  
+    await program.methods
+      .depositToken(new anchor.BN(depositAmount), id)
+      .accountsPartial({
+        relayEscrow: relayEscrowPDA,
+        mint: mint2022Pubkey,
+        sender: user.publicKey,
+        senderTokenAccount: user2022TokenAccount,
+        depositor: user.publicKey,
+        vaultTokenAccount: vault2022TokenAccount,
+        vault: vaultPDA,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([user])
+      .rpc();
+  
+    const userBalanceAfter = await provider.connection.getTokenAccountBalance(
+      user2022TokenAccount
+    );
+    const vaultBalanceAfter =
+      await provider.connection.getTokenAccountBalance(vault2022TokenAccount);
+  
+    assert.equal(
+      Number(userBalanceBefore.value.amount) -
+      Number(userBalanceAfter.value.amount),
+      depositAmount,
+      "Incorrect token deduction from user"
+    );
+  
+    assert.equal(
+      Number(vaultBalanceAfter.value.amount),
+      depositAmount,
+      "Incorrect token addition to vault"
+    );
+  });
+
+  it("Should fail deposit token with incorrect vault token account", async () => {
+    const depositAmount = LAMPORTS_PER_SOL;
+    const id = Array.from(Buffer.alloc(32, 4));
+    
+    // Create a random token account as wrong vault token account
+    const wrongVaultKeypair = Keypair.generate();
+    const wrongVaultTokenAccount = await createAssociatedTokenAccount(
+      provider.connection,
+      owner,
+      mintPubkey,
+      wrongVaultKeypair.publicKey
+    );
+  
+    try {
+      await program.methods
+        .depositToken(new anchor.BN(depositAmount), id)
+        .accountsPartial({
+          relayEscrow: relayEscrowPDA,
+          mint: mintPubkey,
+          sender: user.publicKey,
+          senderTokenAccount: userTokenAccount,
+          depositor: user.publicKey,
+          vaultTokenAccount: wrongVaultTokenAccount, // Use wrong vault token account
+          vault: vaultPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user])
+        .rpc();
+  
+      assert.fail("Should have failed with invalid vault token account");
+    } catch (err) {
+      assert.include(err.message, "InvalidVaultTokenAccount");
+    }
+  
+    // Verify the tokens are still in user's account
+    const userBalance = await provider.connection.getTokenAccountBalance(
+      userTokenAccount
+    );
+    assert.isAtLeast(
+      Number(userBalance.value.amount),
+      depositAmount,
+      "User tokens should not have been deducted"
+    );
+  
+    // Verify the wrong vault token account didn't receive any tokens
+    const wrongVaultBalance = await provider.connection.getTokenAccountBalance(
+      wrongVaultTokenAccount
+    );
+    assert.equal(
+      Number(wrongVaultBalance.value.amount),
+      0,
+      "Wrong vault should not have received any tokens"
+    );
+  });
+
   it("Execute native transfer with allocator signature", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 10; // 0.1 SOL
 
@@ -483,6 +683,73 @@ describe("Relay Escrow", () => {
     );
   });
 
+  it("Execute token2022 transfer with allocator signature", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 2;
+  
+    const request = {
+      recipient: recipient.publicKey,
+      token: mint2022Pubkey,
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
+    };
+  
+    const messagePath = hashRequest(request);
+    const signature = nacl.sign.detached(messagePath, allocator.secretKey);
+    const requestPDA = await getUsedRequestPDA(request);
+  
+    const recipientBalanceBefore =
+      await provider.connection.getTokenAccountBalance(recipient2022TokenAccount);
+    const vaultBalanceBefore = await provider.connection.getTokenAccountBalance(
+      vault2022TokenAccount
+    );
+  
+    await program.methods
+      .executeTransfer(request)
+      .accountsPartial({
+        mint: mint2022Pubkey,
+        vaultTokenAccount: vault2022TokenAccount,
+        recipientTokenAccount: recipient2022TokenAccount,
+        relayEscrow: relayEscrowPDA,
+        executor: provider.wallet.publicKey,
+        recipient: recipient.publicKey,
+        vault: vaultPDA,
+        usedRequest: requestPDA,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .preInstructions([
+        anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+          publicKey: allocator.publicKey.toBytes(),
+          message: messagePath,
+          signature: signature,
+        }),
+      ])
+      .rpc();
+  
+    const recipientBalanceAfter =
+      await provider.connection.getTokenAccountBalance(recipient2022TokenAccount);
+    const vaultBalanceAfter = await provider.connection.getTokenAccountBalance(
+      vault2022TokenAccount
+    );
+  
+    assert.equal(
+      Number(recipientBalanceAfter.value.amount) -
+      Number(recipientBalanceBefore.value.amount),
+      transferAmount,
+      "Incorrect token transfer to recipient"
+    );
+  
+    assert.equal(
+      Number(vaultBalanceBefore.value.amount) -
+      Number(vaultBalanceAfter.value.amount),
+      transferAmount,
+      "Incorrect token deduction from vault"
+    );
+  });
+
   it("Should fail with invalid allocator signature", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 2;
     const fakeAllocator = Keypair.generate();
@@ -607,6 +874,64 @@ describe("Relay Escrow", () => {
     } catch (e) {
       assert.include(e.message, "already in use");
       assert.include(e.message, requestPDA.toBase58());
+    }
+  });
+
+  it("Should fail execute transfer with mismatched recipient", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 10;
+    const wrongRecipient = Keypair.generate();
+  
+    // Create transfer request with recipient A
+    const request = {
+      recipient: recipient.publicKey, // Use original recipient in request
+      token: null,
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
+    };
+  
+    const messagePath = hashRequest(request);
+    const signature = nacl.sign.detached(messagePath, allocator.secretKey);
+    const requestPDA = await getUsedRequestPDA(request);
+  
+    try {
+      // But try to execute with recipient B
+      await program.methods
+        .executeTransfer(request)
+        .accountsPartial({
+          mint: null,
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayEscrow: relayEscrowPDA,
+          executor: provider.wallet.publicKey,
+          recipient: wrongRecipient.publicKey, // Use different recipient in accounts
+          vault: vaultPDA,
+          usedRequest: requestPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([
+          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+            publicKey: allocator.publicKey.toBytes(),
+            message: messagePath,
+            signature: signature,
+          }),
+        ])
+        .rpc();
+  
+      assert.fail("Should have failed with invalid recipient");
+    } catch (err) {
+      assert.include(err.message, "InvalidRecipient");
+  
+      // Verify request was not marked as used
+      try {
+        await program.account.usedRequest.fetch(requestPDA);
+        assert.fail("Request should not exist");
+      } catch (e) {
+        assert.include(e.message, "Account does not exist");
+      }
     }
   });
 
