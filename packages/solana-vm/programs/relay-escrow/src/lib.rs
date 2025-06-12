@@ -10,15 +10,21 @@ use anchor_lang::{
 };
 
 use anchor_spl::{
-    associated_token::{AssociatedToken, Create},
-    token::{self, Token, TokenAccount, Transfer},
+    associated_token::{AssociatedToken, Create, get_associated_token_address_with_program_id},
+    token_interface::{TokenInterface, TokenAccount, Transfer, Mint, transfer}, 
 };
+
+//----------------------------------------
+// Constants
+//----------------------------------------
+
+pub const AUTHORIZED_PUBKEY: Pubkey = pubkey!("7LZXYdDQcRTsXnL9EU2zGkninV3yJsqX43m4RMPbs68u"); 
 
 //----------------------------------------
 // Program ID
 //----------------------------------------
 
-declare_id!("H7BhnmRd2wjuifbDRzjVMNZoXM7Y1qXh2cRAD24tQFr");
+declare_id!("4s6BJkymabK7o275uaThj5zaPybLovbMdjtHAvyM6T92");
 
 //----------------------------------------
 // Program Module
@@ -92,8 +98,21 @@ pub mod relay_escrow {
             ))?;
         }
 
+        let expected_vault_ata = get_associated_token_address_with_program_id(
+            &ctx.accounts.vault.key(), 
+            &ctx.accounts.mint.key(),
+            &ctx.accounts.token_program.key()
+        ); 
+        
+        // Check if the vault token account is the expected associated token account
+        require_keys_eq!(
+            ctx.accounts.vault_token_account.key(), 
+            expected_vault_ata, 
+            CustomError::InvalidVaultTokenAccount
+        );
+
         // Transfer to vault
-        token::transfer(
+        transfer(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
                 Transfer {
@@ -152,6 +171,12 @@ pub mod relay_escrow {
             // Transfer native
             None => {
                 let vault_seeds: &[&[u8]] = &[b"vault", &[vault_bump]];
+                // Recipient validation
+                require_keys_eq!(
+                    ctx.accounts.recipient.key(),
+                    request.recipient,
+                    CustomError::InvalidRecipient
+                );
                 invoke_signed(
                     &system_instruction::transfer(
                         &ctx.accounts.vault.key(),
@@ -183,7 +208,13 @@ pub mod relay_escrow {
                     .as_ref()
                     .ok_or(CustomError::InvalidMint)?;
 
-                token::transfer(
+                // Recipient validation
+                require_keys_eq!(
+                    recipient_token.owner,
+                    request.recipient,
+                    CustomError::InvalidRecipient
+                );
+                transfer(
                     CpiContext::new_with_signer(
                         ctx.accounts.token_program.to_account_info(),
                         Transfer {
@@ -213,6 +244,7 @@ pub mod relay_escrow {
 //----------------------------------------
 
 #[account]
+#[derive(InitSpace)]
 pub struct RelayEscrow {
     pub owner: Pubkey,
     pub allocator: Pubkey,
@@ -220,6 +252,7 @@ pub struct RelayEscrow {
 }
 
 #[account]
+#[derive(InitSpace)]
 pub struct UsedRequest {
     pub is_used: bool,
 }
@@ -233,9 +266,10 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = owner,
-        space = 8 + 32 + 32 + 1, // discriminator(8) + owner(32) + allocator(32) + vault_bump(1)
+        space = 8 + RelayEscrow::INIT_SPACE,
         seeds = [b"relay_escrow"],
-        bump
+        bump,
+        constraint = owner.key() == AUTHORIZED_PUBKEY @ CustomError::Unauthorized
     )]
     pub relay_escrow: Account<'info, RelayEscrow>,
 
@@ -296,7 +330,7 @@ pub struct DepositToken<'info> {
     )]
     pub relay_escrow: Account<'info, RelayEscrow>,
 
-    pub mint: Account<'info, token::Mint>,
+    pub mint: InterfaceAccount<'info, Mint>,
 
     #[account(mut)]
     pub sender: Signer<'info>,
@@ -304,9 +338,10 @@ pub struct DepositToken<'info> {
     #[account(
         mut,
         associated_token::mint = mint,
-        associated_token::authority = sender
+        associated_token::authority = sender,
+        associated_token::token_program = token_program
     )]
-    pub sender_token_account: Account<'info, TokenAccount>,
+    pub sender_token_account: InterfaceAccount<'info, TokenAccount>,
 
     /// CHECK: Used as public key only
     pub depositor: UncheckedAccount<'info>,
@@ -322,7 +357,7 @@ pub struct DepositToken<'info> {
     )]
     pub vault: UncheckedAccount<'info>,
 
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
@@ -330,6 +365,10 @@ pub struct DepositToken<'info> {
 #[derive(Accounts)]
 #[instruction(request: TransferRequest)]
 pub struct ExecuteTransfer<'info> {
+    #[account(
+        seeds = [b"relay_escrow"],
+        bump
+    )]
     pub relay_escrow: Account<'info, RelayEscrow>,
 
     #[account(mut)]
@@ -347,26 +386,28 @@ pub struct ExecuteTransfer<'info> {
     )]
     pub vault: UncheckedAccount<'info>,
 
-    pub mint: Option<Account<'info, token::Mint>>,
+    pub mint: Option<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         associated_token::mint = mint,
-        associated_token::authority = vault
+        associated_token::authority = vault,
+        associated_token::token_program = token_program
     )]
-    pub vault_token_account: Option<Account<'info, TokenAccount>>,
+    pub vault_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         associated_token::mint = mint,
-        associated_token::authority = recipient
+        associated_token::authority = recipient,
+        associated_token::token_program = token_program
     )]
-    pub recipient_token_account: Option<Account<'info, TokenAccount>>,
+    pub recipient_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         init,
         payer = executor,
-        space = 8 + 1,
+        space = 8 + UsedRequest::INIT_SPACE,
         seeds = [
             b"used_request",
             &request.get_hash().to_bytes()[..],
@@ -375,7 +416,7 @@ pub struct ExecuteTransfer<'info> {
     )]
     pub used_request: Account<'info, UsedRequest>,
 
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 
@@ -443,6 +484,10 @@ pub enum CustomError {
     MissingSignature,
     #[msg("Signature expired")]
     SignatureExpired,
+    #[msg("Invalid recipient")]
+    InvalidRecipient,
+    #[msg("Invalid vault token account")]
+    InvalidVaultTokenAccount,
 }
 
 //----------------------------------------
