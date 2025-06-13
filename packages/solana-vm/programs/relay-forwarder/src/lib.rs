@@ -1,29 +1,54 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::{self, CloseAccount, Token, TokenAccount},
+    token_interface::{close_account, TokenInterface, TokenAccount, CloseAccount, Mint},
 };
 use relay_escrow::program::RelayEscrow;
+use anchor_lang::system_program;
 
-declare_id!("FEdx57eQ7pATqyPNZnW3EWBdhvfapXBz4WMo2Qk5Cm6h");
+// Seed for forwarder PDA
+pub const FORWARDER_SEED: &[u8] = b"forwarder";
+
+declare_id!("EbWguaxgPD4DFqUwPKRohRkh1LQhNvAKxbvEXFrSx9bc");
 
 #[program]
 pub mod relay_forwarder {
     use super::*;
 
     /// Forwards native tokens from the forwarder account to the relay escrow vault
-    pub fn forward_native(ctx: Context<ForwardNative>, id: [u8; 32]) -> Result<()> {
+    pub fn forward_native(
+        ctx: Context<ForwardNative>,
+        id: [u8; 32],
+        should_close: bool,
+    ) -> Result<()> {
         let amount = ctx.accounts.forwarder.lamports();
         require!(amount > 0, ForwarderError::InsufficientBalance);
 
+        let sender_key = ctx.accounts.sender.key();
+        let forwarder_bump = ctx.bumps.forwarder;
+        let forwarder_seeds = &[
+            FORWARDER_SEED,
+            sender_key.as_ref(),
+            id.as_ref(),
+            &[forwarder_bump],
+        ];
+
         relay_escrow::cpi::deposit_native(
-            CpiContext::new(
+            CpiContext::new_with_signer(
                 ctx.accounts.relay_escrow_program.to_account_info(),
                 ctx.accounts.into_deposit_accounts(),
+                &[forwarder_seeds]
             ),
             amount,
             id,
         )?;
+
+        if should_close {
+            close(
+                ctx.accounts.forwarder.to_account_info(),
+                ctx.accounts.sender.to_account_info(),
+            )?;
+        }
 
         Ok(())
     }
@@ -40,25 +65,37 @@ pub mod relay_forwarder {
             ForwarderError::InsufficientBalance
         );
 
+        let sender = ctx.accounts.sender.key();
+        let seeds = &[
+            FORWARDER_SEED,
+            sender.as_ref(),
+            id.as_ref(),
+            &[ctx.bumps.forwarder],
+        ];
+
+        let signer_seeds = &[&seeds[..]];
+
         relay_escrow::cpi::deposit_token(
-            CpiContext::new(
+            CpiContext::new_with_signer(
                 ctx.accounts.relay_escrow_program.to_account_info(),
                 ctx.accounts.into_deposit_accounts(),
+                signer_seeds
             ),
             forwarder_token_balance,
             id,
         )?;
 
         if should_close {
-            let close_account_cpi_ctx = CpiContext::new(
+            let close_account_cpi_ctx = CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
                 CloseAccount {
                     account: ctx.accounts.forwarder_token_account.to_account_info(),
                     destination: ctx.accounts.forwarder.to_account_info(),
                     authority: ctx.accounts.forwarder.to_account_info(),
                 },
+                signer_seeds
             );
-            token::close_account(close_account_cpi_ctx)?;
+            close_account(close_account_cpi_ctx)?;
         }
 
         Ok(())
@@ -67,16 +104,27 @@ pub mod relay_forwarder {
 
 // Account structure for forwarding native tokens
 #[derive(Accounts)]
-#[instruction(
-    id: [u8; 32],
-)]
+#[instruction(id: [u8; 32], should_close: bool)]
 pub struct ForwardNative<'info> {
-    // The forwarder account that holds and will send the tokens
+
+    // User who initiates the forward
     #[account(mut)]
-    pub forwarder: Signer<'info>,
+    pub sender: Signer<'info>,
 
     /// CHECK: Used as public key only
     pub depositor: UncheckedAccount<'info>,
+
+    /// CHECK: Forwarder PDA that will act as the intermediary
+    #[account(
+        mut,
+        seeds = [
+            FORWARDER_SEED,
+            sender.key().as_ref(),
+            id.as_ref()
+        ],
+        bump
+    )]
+    pub forwarder: UncheckedAccount<'info>,
 
     /// CHECK: Relay escrow program account
     pub relay_escrow: UncheckedAccount<'info>,
@@ -105,16 +153,26 @@ impl<'info> ForwardNative<'info> {
 
 // Account structure for forwarding spl tokens
 #[derive(Accounts)]
-#[instruction(
-    id: [u8; 32],
-)]
+#[instruction(id: [u8; 32], should_close: bool)]
 pub struct ForwardToken<'info> {
-    // The forwarder account that holds and will send the tokens
+    // User who initiates the forward
     #[account(mut)]
-    pub forwarder: Signer<'info>,
+    pub sender: Signer<'info>,
 
     /// CHECK: Used as public key only
     pub depositor: UncheckedAccount<'info>,
+
+    /// CHECK: Forwarder PDA that will act as the intermediary
+    #[account(
+        mut,
+        seeds = [
+            FORWARDER_SEED,
+            sender.key().as_ref(),
+            id.as_ref()
+        ],
+        bump
+    )]
+    pub forwarder: UncheckedAccount<'info>,
 
     /// CHECK: Relay escrow program account
     pub relay_escrow: UncheckedAccount<'info>,
@@ -122,21 +180,24 @@ pub struct ForwardToken<'info> {
     /// CHECK: Relay escrow vault
     pub relay_vault: UncheckedAccount<'info>,
 
-    pub mint: Account<'info, token::Mint>,
+    /// CHECK: Token mint account
+    pub mint: InterfaceAccount<'info, Mint>,
 
+    /// CHECK: Associated token account for the forwarder PDA
     #[account(
         mut,
         associated_token::mint = mint,
-        associated_token::authority = forwarder
+        associated_token::authority = forwarder,
+        associated_token::token_program = token_program
     )]
-    pub forwarder_token_account: Account<'info, TokenAccount>,
+    pub forwarder_token_account: InterfaceAccount<'info, TokenAccount>,
 
     /// CHECK: Relay escrow vault token account
     #[account(mut)]
     pub relay_vault_token: UncheckedAccount<'info>,
 
     pub relay_escrow_program: Program<'info, relay_escrow::program::RelayEscrow>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
@@ -164,4 +225,18 @@ impl<'info> ForwardToken<'info> {
 pub enum ForwarderError {
     #[msg("Insufficient balance")]
     InsufficientBalance,
+}
+
+/// Closes an account by transferring all lamports to the `sol_destination`.
+///
+/// Lifted from private `anchor_lang::common::close`: https://github.com/coral-xyz/anchor/blob/714d5248636493a3d1db1481f16052836ee59e94/lang/src/common.rs#L6
+pub fn close<'info>(info: AccountInfo<'info>, sol_destination: AccountInfo<'info>) -> Result<()> {
+    // Transfer tokens from the account to the sol_destination.
+    let dest_starting_lamports = sol_destination.lamports();
+    **sol_destination.lamports.borrow_mut() =
+        dest_starting_lamports.checked_add(info.lamports()).unwrap();
+    **info.lamports.borrow_mut() = 0;
+
+    info.assign(&system_program::ID);
+    info.realloc(0, false).map_err(Into::into)
 }
