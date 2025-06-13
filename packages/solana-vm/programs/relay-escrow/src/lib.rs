@@ -103,7 +103,7 @@ pub mod relay_escrow {
             &ctx.accounts.mint.key(),
             &ctx.accounts.token_program.key()
         ); 
-        
+
         // Check if the vault token account is the expected associated token account
         require_keys_eq!(
             ctx.accounts.vault_token_account.key(), 
@@ -494,6 +494,7 @@ pub enum CustomError {
 // Helper Functions
 //----------------------------------------
 
+/// Taken from https://github.com/solana-labs/perpetuals/blob/ebfb4972ea5d1cde8580a7e8c7b9dbd1fdb2b002/programs/perpetuals/src/instructions/set_custom_oracle_price_permissionless.rs#L90
 fn validate_ed25519_signature_instruction(
     signature_ix: &Instruction,
     expected_signer: &Pubkey,

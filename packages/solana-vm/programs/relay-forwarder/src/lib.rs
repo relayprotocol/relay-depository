@@ -24,19 +24,18 @@ pub mod relay_forwarder {
         require!(amount > 0, ForwarderError::InsufficientBalance);
 
         let sender_key = ctx.accounts.sender.key();
-        let forwarder_bump = ctx.bumps.forwarder;
-        let forwarder_seeds = &[
+        let signer_seeds = &[
             FORWARDER_SEED,
             sender_key.as_ref(),
             id.as_ref(),
-            &[forwarder_bump],
+            &[ctx.bumps.forwarder],
         ];
 
         relay_escrow::cpi::deposit_native(
             CpiContext::new_with_signer(
                 ctx.accounts.relay_escrow_program.to_account_info(),
                 ctx.accounts.into_deposit_accounts(),
-                &[forwarder_seeds]
+                &[signer_seeds]
             ),
             amount,
             id,
@@ -57,10 +56,10 @@ pub mod relay_forwarder {
             ForwarderError::InsufficientBalance
         );
 
-        let sender = ctx.accounts.sender.key();
+        let sender_key = ctx.accounts.sender.key();
         let seeds = &[
             FORWARDER_SEED,
-            sender.as_ref(),
+            sender_key.as_ref(),
             id.as_ref(),
             &[ctx.bumps.forwarder],
         ];
