@@ -19,7 +19,6 @@ pub mod relay_forwarder {
     pub fn forward_native(
         ctx: Context<ForwardNative>,
         id: [u8; 32],
-        should_close: bool,
     ) -> Result<()> {
         let amount = ctx.accounts.forwarder.lamports();
         require!(amount > 0, ForwarderError::InsufficientBalance);
@@ -42,13 +41,6 @@ pub mod relay_forwarder {
             amount,
             id,
         )?;
-
-        if should_close {
-            close(
-                ctx.accounts.forwarder.to_account_info(),
-                ctx.accounts.sender.to_account_info(),
-            )?;
-        }
 
         Ok(())
     }
@@ -104,7 +96,7 @@ pub mod relay_forwarder {
 
 // Account structure for forwarding native tokens
 #[derive(Accounts)]
-#[instruction(id: [u8; 32], should_close: bool)]
+#[instruction(id: [u8; 32])]
 pub struct ForwardNative<'info> {
 
     // User who initiates the forward

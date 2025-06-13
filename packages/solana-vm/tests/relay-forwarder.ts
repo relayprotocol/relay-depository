@@ -161,7 +161,7 @@ describe("relay-forwarder", () => {
     
     // Forward SOL from PDA to vault with should_close = true
     const depositTx = await forwarderProgram.methods
-      .forwardNative(id, true)
+      .forwardNative(id)
       .accountsPartial({
         sender: sender.publicKey,
         depositor: depositor.publicKey,
@@ -234,7 +234,7 @@ describe("relay-forwarder", () => {
     // Generate unique ID for this forward
     const id = Array.from(anchor.web3.Keypair.generate().publicKey.toBytes());
 
-    // Get forwarder PDA and its token account
+    // Get forwarder PDA and  its token account
     const [forwarderPda] = anchor.web3.PublicKey.findProgramAddressSync(
         [
           Buffer.from("forwarder"),
@@ -481,7 +481,7 @@ describe("relay-forwarder", () => {
   
     try {
       await forwarderProgram.methods
-        .forwardNative(id, false)
+        .forwardNative(id)
         .accountsPartial({
             sender: sender.publicKey,
             depositor: depositor.publicKey,
