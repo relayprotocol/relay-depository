@@ -10,21 +10,27 @@ use anchor_lang::{
 };
 
 use anchor_spl::{
-    associated_token::{AssociatedToken, Create, get_associated_token_address_with_program_id},
-    token_interface::{TokenInterface, TokenAccount, Transfer, Mint, transfer}, 
+    associated_token::{get_associated_token_address_with_program_id, AssociatedToken, Create},
+    token_interface::{transfer, Mint, TokenAccount, TokenInterface, Transfer},
 };
 
 //----------------------------------------
 // Constants
 //----------------------------------------
 
-pub const AUTHORIZED_PUBKEY: Pubkey = pubkey!("7LZXYdDQcRTsXnL9EU2zGkninV3yJsqX43m4RMPbs68u"); 
+const AUTHORIZED_PUBKEY: Pubkey = pubkey!("7LZXYdDQcRTsXnL9EU2zGkninV3yJsqX43m4RMPbs68u");
+
+const RELAY_ESCROW_SEED: &[u8] = b"relay_escrow";
+
+const USED_REQUEST_SEED: &[u8] = b"used_request";
+
+const VAULT_SEED: &[u8] = b"vault";
 
 //----------------------------------------
 // Program ID
 //----------------------------------------
 
-declare_id!("4s6BJkymabK7o275uaThj5zaPybLovbMdjtHAvyM6T92");
+declare_id!("H7BhnmRd2wjuifbDRzjVMNZoXM7Y1qXh2cRAD24tQFr");
 
 //----------------------------------------
 // Program Module
@@ -37,9 +43,11 @@ pub mod relay_escrow {
     // Initialize program with owner and allocator
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let relay_escrow = &mut ctx.accounts.relay_escrow;
+
         relay_escrow.owner = ctx.accounts.owner.key();
         relay_escrow.allocator = ctx.accounts.allocator.key();
         relay_escrow.vault_bump = ctx.bumps.vault;
+
         Ok(())
     }
 
@@ -51,7 +59,9 @@ pub mod relay_escrow {
             relay_escrow.owner,
             CustomError::Unauthorized
         );
+
         relay_escrow.allocator = new_allocator;
+
         Ok(())
     }
 
@@ -99,15 +109,15 @@ pub mod relay_escrow {
         }
 
         let expected_vault_ata = get_associated_token_address_with_program_id(
-            &ctx.accounts.vault.key(), 
+            &ctx.accounts.vault.key(),
             &ctx.accounts.mint.key(),
-            &ctx.accounts.token_program.key()
-        ); 
+            &ctx.accounts.token_program.key(),
+        );
 
         // Check if the vault token account is the expected associated token account
         require_keys_eq!(
-            ctx.accounts.vault_token_account.key(), 
-            expected_vault_ata, 
+            ctx.accounts.vault_token_account.key(),
+            expected_vault_ata,
             CustomError::InvalidVaultTokenAccount
         );
 
@@ -166,17 +176,18 @@ pub mod relay_escrow {
 
         used_request.is_used = true;
 
+        let seeds: &[&[u8]] = &[VAULT_SEED, &[vault_bump]];
+
         // Execute the transfer based on the token type
         match request.token {
             // Transfer native
             None => {
-                let vault_seeds: &[&[u8]] = &[b"vault", &[vault_bump]];
-                // Recipient validation
                 require_keys_eq!(
                     ctx.accounts.recipient.key(),
                     request.recipient,
                     CustomError::InvalidRecipient
                 );
+
                 invoke_signed(
                     &system_instruction::transfer(
                         &ctx.accounts.vault.key(),
@@ -188,41 +199,40 @@ pub mod relay_escrow {
                         ctx.accounts.recipient.to_account_info(),
                         ctx.accounts.system_program.to_account_info(),
                     ],
-                    &[vault_seeds],
+                    &[seeds],
                 )?;
             }
             // Transfer token
             Some(token_mint) => {
                 let mint = ctx.accounts.mint.as_ref().ok_or(CustomError::InvalidMint)?;
-
                 require_keys_eq!(token_mint, mint.key(), CustomError::InvalidMint);
 
-                let vault_token = ctx
+                let vault_token_account = ctx
                     .accounts
                     .vault_token_account
                     .as_ref()
                     .ok_or(CustomError::InvalidMint)?;
-                let recipient_token = ctx
+                let recipient_token_account = ctx
                     .accounts
                     .recipient_token_account
                     .as_ref()
                     .ok_or(CustomError::InvalidMint)?;
 
-                // Recipient validation
                 require_keys_eq!(
-                    recipient_token.owner,
+                    recipient_token_account.owner,
                     request.recipient,
                     CustomError::InvalidRecipient
                 );
+
                 transfer(
                     CpiContext::new_with_signer(
                         ctx.accounts.token_program.to_account_info(),
                         Transfer {
-                            from: vault_token.to_account_info(),
-                            to: recipient_token.to_account_info(),
+                            from: vault_token_account.to_account_info(),
+                            to: recipient_token_account.to_account_info(),
                             authority: ctx.accounts.vault.to_account_info(),
                         },
-                        &[&[b"vault", &[vault_bump]]],
+                        &[seeds],
                     ),
                     request.amount,
                 )?;
@@ -267,16 +277,16 @@ pub struct Initialize<'info> {
         init,
         payer = owner,
         space = 8 + RelayEscrow::INIT_SPACE,
-        seeds = [b"relay_escrow"],
-        bump,
-        constraint = owner.key() == AUTHORIZED_PUBKEY @ CustomError::Unauthorized
+        constraint = owner.key() == AUTHORIZED_PUBKEY @ CustomError::Unauthorized,
+        seeds = [RELAY_ESCROW_SEED],
+        bump
     )]
     pub relay_escrow: Account<'info, RelayEscrow>,
 
     /// CHECK: PDA that will hold SOL
     #[account(
         mut,
-        seeds = [b"vault"],
+        seeds = [VAULT_SEED],
         bump
     )]
     pub vault: UncheckedAccount<'info>,
@@ -292,15 +302,20 @@ pub struct Initialize<'info> {
 
 #[derive(Accounts)]
 pub struct SetAllocator<'info> {
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [RELAY_ESCROW_SEED],
+        bump
+    )]
     pub relay_escrow: Account<'info, RelayEscrow>,
+
     pub owner: Signer<'info>,
 }
 
 #[derive(Accounts)]
 pub struct DepositNative<'info> {
     #[account(
-        seeds = [b"relay_escrow"],
+        seeds = [RELAY_ESCROW_SEED],
         bump
     )]
     pub relay_escrow: Account<'info, RelayEscrow>,
@@ -314,7 +329,7 @@ pub struct DepositNative<'info> {
     /// CHECK: PDA vault that will hold tokens
     #[account(
         mut,
-        seeds = [b"vault"],
+        seeds = [VAULT_SEED],
         bump = relay_escrow.vault_bump
     )]
     pub vault: UncheckedAccount<'info>,
@@ -325,15 +340,25 @@ pub struct DepositNative<'info> {
 #[derive(Accounts)]
 pub struct DepositToken<'info> {
     #[account(
-        seeds = [b"relay_escrow"],
+        seeds = [RELAY_ESCROW_SEED],
         bump
     )]
     pub relay_escrow: Account<'info, RelayEscrow>,
 
-    pub mint: InterfaceAccount<'info, Mint>,
-
     #[account(mut)]
     pub sender: Signer<'info>,
+
+    /// CHECK: Used as public key only
+    pub depositor: UncheckedAccount<'info>,
+
+    /// CHECK: PDA that will hold tokens
+    #[account(
+        seeds = [VAULT_SEED],
+        bump = relay_escrow.vault_bump
+    )]
+    pub vault: UncheckedAccount<'info>,
+
+    pub mint: InterfaceAccount<'info, Mint>,
 
     #[account(
         mut,
@@ -343,19 +368,9 @@ pub struct DepositToken<'info> {
     )]
     pub sender_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    /// CHECK: Used as public key only
-    pub depositor: UncheckedAccount<'info>,
-
     /// CHECK: Will be initialized if needed
     #[account(mut)]
     pub vault_token_account: UncheckedAccount<'info>,
-
-    /// CHECK: PDA that will hold tokens
-    #[account(
-        seeds = [b"vault"],
-        bump = relay_escrow.vault_bump
-    )]
-    pub vault: UncheckedAccount<'info>,
 
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -366,7 +381,7 @@ pub struct DepositToken<'info> {
 #[instruction(request: TransferRequest)]
 pub struct ExecuteTransfer<'info> {
     #[account(
-        seeds = [b"relay_escrow"],
+        seeds = [RELAY_ESCROW_SEED],
         bump
     )]
     pub relay_escrow: Account<'info, RelayEscrow>,
@@ -381,20 +396,12 @@ pub struct ExecuteTransfer<'info> {
     /// CHECK: Native token vault PDA
     #[account(
         mut,
-        seeds = [b"vault"],
+        seeds = [VAULT_SEED],
         bump = relay_escrow.vault_bump
     )]
     pub vault: UncheckedAccount<'info>,
 
     pub mint: Option<InterfaceAccount<'info, Mint>>,
-
-    #[account(
-        mut,
-        associated_token::mint = mint,
-        associated_token::authority = vault,
-        associated_token::token_program = token_program
-    )]
-    pub vault_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
@@ -405,23 +412,31 @@ pub struct ExecuteTransfer<'info> {
     pub recipient_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
+        mut,
+        associated_token::mint = mint,
+        associated_token::authority = vault,
+        associated_token::token_program = token_program
+    )]
+    pub vault_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
+
+    #[account(
         init,
         payer = executor,
         space = 8 + UsedRequest::INIT_SPACE,
         seeds = [
-            b"used_request",
+            USED_REQUEST_SEED,
             &request.get_hash().to_bytes()[..],
         ],
         bump
     )]
     pub used_request: Account<'info, UsedRequest>,
 
+    /// CHECK: For ed25519 verification
+    pub ix_sysvar: AccountInfo<'info>,
+
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
-
-    /// CHECK: For ed25519 verification
-    pub ix_sysvar: AccountInfo<'info>,
 }
 
 //----------------------------------------
@@ -494,13 +509,14 @@ pub enum CustomError {
 // Helper Functions
 //----------------------------------------
 
-/// Taken from https://github.com/solana-labs/perpetuals/blob/ebfb4972ea5d1cde8580a7e8c7b9dbd1fdb2b002/programs/perpetuals/src/instructions/set_custom_oracle_price_permissionless.rs#L90
+/// Taken from:
+/// https://github.com/solana-labs/perpetuals/blob/ebfb4972ea5d1cde8580a7e8c7b9dbd1fdb2b002/programs/perpetuals/src/instructions/set_custom_oracle_price_permissionless.rs#L90
 fn validate_ed25519_signature_instruction(
     signature_ix: &Instruction,
     expected_signer: &Pubkey,
     expected_request: &TransferRequest,
 ) -> Result<()> {
-    // Verify program ID
+    // Verify program id
     require_eq!(
         signature_ix.program_id,
         solana_program::ed25519_program::id(),
