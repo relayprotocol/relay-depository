@@ -5,7 +5,7 @@ use anchor_spl::{
 };
 use relay_escrow::program::RelayEscrow;
 
-declare_id!("FEdx57eQ7pATqyPNZnW3EWBdhvfapXBz4WMo2Qk5Cm6h");
+declare_id!("EbWguaxgPD4DFqUwPKRohRkh1LQhNvAKxbvEXFrSx9bc");
 
 #[program]
 pub mod relay_forwarder {
