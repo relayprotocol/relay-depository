@@ -46,7 +46,8 @@ pub mod relay_forwarder {
     /// Forwards spl tokens from the forwarder token account to the relay escrow vault token account
     pub fn forward_token(
         ctx: Context<ForwardToken>,
-        id: [u8; 32]
+        id: [u8; 32],
+        should_close: bool,
     ) -> Result<()> {
         let amount = ctx.accounts.forwarder_token_account.amount;
         require!(
@@ -66,16 +67,18 @@ pub mod relay_forwarder {
             id,
         )?;
 
-        let close_account_cpi_ctx = CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            CloseAccount {
-                account: ctx.accounts.forwarder_token_account.to_account_info(),
-                destination: ctx.accounts.forwarder.to_account_info(),
-                authority: ctx.accounts.forwarder.to_account_info(),
-            },
-            seeds,
-        );
-        close_account(close_account_cpi_ctx)?;
+        if should_close {
+            let close_account_cpi_ctx = CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                CloseAccount {
+                    account: ctx.accounts.forwarder_token_account.to_account_info(),
+                    destination: ctx.accounts.forwarder.to_account_info(),
+                    authority: ctx.accounts.forwarder.to_account_info(),
+                },
+                seeds,
+            );
+            close_account(close_account_cpi_ctx)?;
+        }
 
         Ok(())
     }
