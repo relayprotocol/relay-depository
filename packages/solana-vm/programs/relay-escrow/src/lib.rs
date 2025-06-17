@@ -183,6 +183,16 @@ pub mod relay_escrow {
                     request.recipient,
                     CustomError::InvalidRecipient
                 );
+
+                // Ensure vault maintains rent-exempt status after transfer
+                let min_rent = Rent::get()?.minimum_balance(0);
+                let vault_balance = ctx.accounts.vault.lamports();
+                let max_transferable = vault_balance.saturating_sub(min_rent);
+                require!(
+                    request.amount <= max_transferable,
+                    CustomError::InsufficientVaultBalance
+                );
+
                 invoke_signed(
                     &system_instruction::transfer(
                         &ctx.accounts.vault.key(),
@@ -497,6 +507,8 @@ pub enum CustomError {
     InvalidRecipient,
     #[msg("Invalid vault token account")]
     InvalidVaultTokenAccount,
+    #[msg("Vault has insufficient balance to remain rent-exempt after transfer")]
+    InsufficientVaultBalance,
 }
 
 //----------------------------------------

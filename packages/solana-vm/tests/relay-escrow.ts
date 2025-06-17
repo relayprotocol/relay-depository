@@ -522,6 +522,54 @@ describe("Relay Escrow", () => {
     );
   });
 
+  it("Should fail while execute native transfer over min rent with allocator signature", async () => {
+    const transferAmount = LAMPORTS_PER_SOL; // 1 SOL
+    // Create transfer request
+    const request = {
+      recipient: recipient.publicKey,
+      token: null, // SOL transfer
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
+    };
+
+    const messagHash = hashRequest(request);
+
+    // Sign with allocator
+    const signature = nacl.sign.detached(messagHash, allocator.secretKey);
+    const requestPDA = await getUsedRequestPDA(request);
+
+    try {
+      await program.methods
+        .executeTransfer(request)
+        .accountsPartial({
+          mint: null,
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayEscrow: relayEscrowPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([
+          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+            publicKey: allocator.publicKey.toBytes(),
+            message: messagHash,
+            signature: signature,
+          }),
+        ])
+        .rpc();
+        assert.fail("Expected transaction to fail with InsufficientVaultBalance error");
+    } catch (err) {
+      assert.include(err.message, "InsufficientVaultBalance");
+    }
+  });
+
   it("Execute native transfer with allocator signature", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 10; // 0.1 SOL
 
@@ -758,7 +806,7 @@ describe("Relay Escrow", () => {
       "Incorrect token deduction from vault"
     );
   });
-  
+
   it("Should fail with invalid allocator signature", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 2;
     const fakeAllocator = Keypair.generate();
