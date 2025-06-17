@@ -10,7 +10,7 @@ use anchor_lang::{
 };
 
 use anchor_spl::{
-    associated_token::{AssociatedToken, Create},
+    associated_token::{get_associated_token_address_with_program_id, AssociatedToken, Create},
     token::{self, Token, TokenAccount, Transfer},
 };
 
@@ -103,6 +103,19 @@ pub mod relay_escrow {
                 },
             ))?;
         }
+
+        let expected_vault_ata = get_associated_token_address_with_program_id(
+            &ctx.accounts.vault.key(),
+            &ctx.accounts.mint.key(),
+            &ctx.accounts.token_program.key(),
+        );
+
+        // Check if the vault token account is the expected associated token account
+        require_keys_eq!(
+            ctx.accounts.vault_token_account.key(),
+            expected_vault_ata,
+            CustomError::InvalidVaultTokenAccount
+        );
 
         // Transfer to vault
         token::transfer(
@@ -469,6 +482,8 @@ pub enum CustomError {
     SignatureExpired,
     #[msg("Invalid recipient")]
     InvalidRecipient,
+    #[msg("Invalid vault token account")]
+    InvalidVaultTokenAccount,
 }
 
 //----------------------------------------

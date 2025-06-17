@@ -351,6 +351,63 @@ describe("Relay Escrow", () => {
     }
   });
 
+  it("Should fail deposit token with incorrect vault token account", async () => {
+    const depositAmount = LAMPORTS_PER_SOL;
+    const id = Array.from(Buffer.alloc(32, 4));
+
+    // Create a random token account as wrong vault token account
+    const wrongVaultKeypair = Keypair.generate();
+    const wrongVaultTokenAccount = await createAssociatedTokenAccount(
+      provider.connection,
+      owner,
+      mintPubkey,
+      wrongVaultKeypair.publicKey
+    );
+
+    try {
+      await program.methods
+        .depositToken(new anchor.BN(depositAmount), id)
+        .accountsPartial({
+          relayEscrow: relayEscrowPDA,
+          mint: mintPubkey,
+          sender: user.publicKey,
+          senderTokenAccount: userTokenAccount,
+          depositor: user.publicKey,
+          vaultTokenAccount: wrongVaultTokenAccount, // Use wrong vault token account
+          vault: vaultPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user])
+        .rpc();
+
+      assert.fail("Should have failed with invalid vault token account");
+    } catch (err) {
+      assert.include(err.message, "InvalidVaultTokenAccount");
+    }
+
+    // Verify the tokens are still in user's account
+    const userBalance = await provider.connection.getTokenAccountBalance(
+      userTokenAccount
+    );
+    assert.isAtLeast(
+      Number(userBalance.value.amount),
+      depositAmount,
+      "User tokens should not have been deducted"
+    );
+
+    // Verify the wrong vault token account didn't receive any tokens
+    const wrongVaultBalance = await provider.connection.getTokenAccountBalance(
+      wrongVaultTokenAccount
+    );
+    assert.equal(
+      Number(wrongVaultBalance.value.amount),
+      0,
+      "Wrong vault should not have received any tokens"
+    );
+  });
+
   it("Execute native transfer with allocator signature", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 10; // 0.1 SOL
 
