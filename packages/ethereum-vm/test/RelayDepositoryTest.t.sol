@@ -6,27 +6,27 @@ import {EIP712} from "solady/utils/EIP712.sol";
 
 import {BaseTest} from "./BaseTest.t.sol";
 
-import {Call, CallRequest, CallResult} from "../src/utils/RelayEscrowStructs.sol";
-import {RelayEscrow} from "../src/RelayEscrow.sol";
+import {Call, CallRequest, CallResult} from "../src/utils/RelayDepositoryStructs.sol";
+import {RelayDepository} from "../src/RelayDepository.sol";
 
-contract RelayEscrowTest is BaseTest, EIP712 {
-    RelayEscrow relayEscrow;
+contract RelayDepositoryTest is BaseTest, EIP712 {
+    RelayDepository relayDepository;
 
     Account allocator = makeAccountAndDeal("allocator", 1 ether);
 
-    // Directly copied from `RelayEscrow` / `Ownable`
+    // Directly copied from `RelayDepository` / `Ownable`
 
     error InvalidSignature();
     error Unauthorized();
 
-    event EscrowNativeDeposit(address from, uint256 amount, bytes32 id);
-    event EscrowErc20Deposit(
+    event RelayNativeDeposit(address from, uint256 amount, bytes32 id);
+    event RelayErc20Deposit(
         address from,
         address token,
         uint256 amount,
         bytes32 id
     );
-    event EscrowCallExecuted(bytes32 id, Call call);
+    event RelayCallExecuted(bytes32 id, Call call);
 
     bytes32 public constant _CALL_TYPEHASH =
         keccak256(
@@ -37,15 +37,12 @@ contract RelayEscrowTest is BaseTest, EIP712 {
             "CallRequest(Call[] calls,uint256 nonce,uint256 expiration)Call(address to,bytes data,uint256 value,bool allowFailure)"
         );
 
-    bytes32 public constant DOMAIN_SEPARATOR =
-        0x51fa773305558637d491860150e2b93d8f98be7fefefb6f2313f98ec2e9ae8d2;
-
     // Setup
 
     function setUp() public override {
         super.setUp();
 
-        relayEscrow = new RelayEscrow(allocator.addr);
+        relayDepository = new RelayDepository(allocator.addr);
     }
 
     // Tests
@@ -58,35 +55,35 @@ contract RelayEscrowTest is BaseTest, EIP712 {
 
         vm.prank(alice.addr);
         vm.expectRevert(Unauthorized.selector);
-        relayEscrow.setAllocator(newAllocator.addr);
+        relayDepository.setAllocator(newAllocator.addr);
 
-        relayEscrow.setAllocator(newAllocator.addr);
-        assertEq(relayEscrow.allocator(), newAllocator.addr);
+        relayDepository.setAllocator(newAllocator.addr);
+        assertEq(relayDepository.allocator(), newAllocator.addr);
     }
 
     function test_depositNative(uint256 amount) public {
         vm.deal(alice.addr, amount);
 
-        vm.expectEmit(true, true, true, true, address(relayEscrow));
-        emit EscrowNativeDeposit(alice.addr, amount, bytes32(uint256(1)));
+        vm.expectEmit(true, true, true, true, address(relayDepository));
+        emit RelayNativeDeposit(alice.addr, amount, bytes32(uint256(1)));
 
         vm.prank(alice.addr);
-        relayEscrow.depositNative{value: amount}(
+        relayDepository.depositNative{value: amount}(
             alice.addr,
             bytes32(uint256(1))
         );
 
-        assertEq(address(relayEscrow).balance, amount);
+        assertEq(address(relayDepository).balance, amount);
     }
 
     function test_depositErc20(uint96 amount) public {
         erc20.mint(alice.addr, amount);
 
         vm.prank(alice.addr);
-        erc20.approve(address(relayEscrow), amount);
+        erc20.approve(address(relayDepository), amount);
 
-        vm.expectEmit(true, true, true, true, address(relayEscrow));
-        emit EscrowErc20Deposit(
+        vm.expectEmit(true, true, true, true, address(relayDepository));
+        emit RelayErc20Deposit(
             alice.addr,
             address(erc20),
             amount,
@@ -94,24 +91,24 @@ contract RelayEscrowTest is BaseTest, EIP712 {
         );
 
         vm.prank(alice.addr);
-        relayEscrow.depositErc20(
+        relayDepository.depositErc20(
             alice.addr,
             address(erc20),
             amount,
             bytes32(uint256(1))
         );
 
-        assertEq(erc20.balanceOf(address(relayEscrow)), amount);
+        assertEq(erc20.balanceOf(address(relayDepository)), amount);
     }
 
     function test_depositErc20_usingAllowance(uint96 amount) public {
         erc20.mint(alice.addr, amount);
 
         vm.prank(alice.addr);
-        erc20.approve(address(relayEscrow), amount);
+        erc20.approve(address(relayDepository), amount);
 
-        vm.expectEmit(true, true, true, true, address(relayEscrow));
-        emit EscrowErc20Deposit(
+        vm.expectEmit(true, true, true, true, address(relayDepository));
+        emit RelayErc20Deposit(
             alice.addr,
             address(erc20),
             amount,
@@ -119,13 +116,13 @@ contract RelayEscrowTest is BaseTest, EIP712 {
         );
 
         vm.prank(alice.addr);
-        relayEscrow.depositErc20(
+        relayDepository.depositErc20(
             alice.addr,
             address(erc20),
             bytes32(uint256(1))
         );
 
-        assertEq(erc20.balanceOf(address(relayEscrow)), amount);
+        assertEq(erc20.balanceOf(address(relayDepository)), amount);
     }
 
     function test_execute_withdrawNative(uint256 amount) public {
@@ -154,10 +151,10 @@ contract RelayEscrowTest is BaseTest, EIP712 {
         );
         bytes memory signature = bytes.concat(r, s, bytes1(v));
 
-        assertEq(relayEscrow.allocator(), allocator.addr);
+        assertEq(relayDepository.allocator(), allocator.addr);
 
         uint256 aliceBalanceBefore = address(alice.addr).balance;
-        relayEscrow.execute(request, signature);
+        relayDepository.execute(request, signature);
         uint256 aliceBalanceAfter = address(alice.addr).balance;
 
         assertEq(aliceBalanceAfter - aliceBalanceBefore, amount);
@@ -193,10 +190,10 @@ contract RelayEscrowTest is BaseTest, EIP712 {
         );
         bytes memory signature = bytes.concat(r, s, bytes1(v));
 
-        assertEq(relayEscrow.allocator(), allocator.addr);
+        assertEq(relayDepository.allocator(), allocator.addr);
 
         uint256 aliceBalanceBefore = erc20.balanceOf(alice.addr);
-        relayEscrow.execute(request, signature);
+        relayDepository.execute(request, signature);
         uint256 aliceBalanceAfter = erc20.balanceOf(alice.addr);
 
         assertEq(aliceBalanceAfter - aliceBalanceBefore, amount);
@@ -230,10 +227,10 @@ contract RelayEscrowTest is BaseTest, EIP712 {
         );
         bytes memory signature = bytes.concat(r, s, bytes1(v));
 
-        assertEq(relayEscrow.allocator(), allocator.addr);
+        assertEq(relayDepository.allocator(), allocator.addr);
 
         vm.expectRevert(InvalidSignature.selector);
-        relayEscrow.execute(request, signature);
+        relayDepository.execute(request, signature);
     }
 
     // Utils (copied from `RelayEscrow`)
@@ -278,7 +275,7 @@ contract RelayEscrowTest is BaseTest, EIP712 {
     function _hashTypedData(
         bytes32 structHash
     ) internal view override returns (bytes32 digest) {
-        digest = _buildDomainSeparator(address(relayEscrow));
+        digest = _buildDomainSeparator(address(relayDepository));
         /// @solidity memory-safe-assembly
         assembly {
             mstore(0x00, 0x1901000000000000)
@@ -314,7 +311,7 @@ contract RelayEscrowTest is BaseTest, EIP712 {
         override
         returns (string memory name, string memory version)
     {
-        name = "RelayEscrow";
+        name = "RelayDepository";
         version = "1";
     }
 }
