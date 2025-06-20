@@ -70,7 +70,7 @@ pub mod relay_forwarder {
             ctx.accounts.token_program.to_account_info(),
             CloseAccount {
                 account: ctx.accounts.forwarder_token_account.to_account_info(),
-                destination: ctx.accounts.forwarder.to_account_info(),
+                destination: ctx.accounts.sender.to_account_info(),
                 authority: ctx.accounts.forwarder.to_account_info(),
             },
             seeds,
