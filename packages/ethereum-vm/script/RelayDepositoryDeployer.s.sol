@@ -47,7 +47,7 @@ contract RelayDepositoryDeployer is Script {
                             keccak256(
                                 abi.encodePacked(
                                     type(RelayDepository).creationCode,
-                                    abi.encode(allocator)
+                                    abi.encode(msg.sender, allocator)
                                 )
                             )
                         )
@@ -66,6 +66,7 @@ contract RelayDepositoryDeployer is Script {
 
         // Deploy
         RelayDepository relayDepository = new RelayDepository{salt: SALT}(
+            msg.sender,
             allocator
         );
 

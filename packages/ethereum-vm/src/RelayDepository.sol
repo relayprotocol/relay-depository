@@ -62,9 +62,9 @@ contract RelayDepository is Ownable, EIP712 {
     /// @notice The allocator address
     address public allocator;
 
-    constructor(address _allocator) {
+    constructor(address _owner, address _allocator) {
+        _initializeOwner(_owner);
         allocator = _allocator;
-        _initializeOwner(msg.sender);
     }
 
     /// @notice Set the allocator address

@@ -42,7 +42,7 @@ contract RelayDepositoryTest is BaseTest, EIP712 {
     function setUp() public override {
         super.setUp();
 
-        relayDepository = new RelayDepository(allocator.addr);
+        relayDepository = new RelayDepository(address(this), allocator.addr);
     }
 
     // Tests
