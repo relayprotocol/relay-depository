@@ -1,0 +1,746 @@
+[
+  {
+    "name": "ethereum",
+    "chainId": 1,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://etherscan.io",
+    "verificationFlags": "--chain 1",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "optimism",
+    "chainId": 10,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "verificationFlags": "--chain 10",
+    "explorerUrl": "https://optimistic.etherscan.io",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "cronos",
+    "chainId": 25,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://cronoscan.com/",
+    "verificationFlags": "--chain 25",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "bnb",
+    "chainId": 56,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://bscscan.com",
+    "verificationFlags": "--chain 56",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "gnosis",
+    "chainId": 100,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://gnosisscan.io",
+    "verificationFlags": "--chain 100",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "polygon",
+    "chainId": 137,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://polygonscan.com/",
+    "verificationFlags": "--chain 137",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "unichain",
+    "chainId": 130,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://uniscan.xyz",
+    "verificationFlags": "--chain 130",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "sonic",
+    "chainId": 146,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://sonicscan.org",
+    "verificationFlags": "--chain 146",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "manta",
+    "chainId": 169,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://manta.socialscan.io",
+    "verificationFlags": "--chain 169 --verifier blockscout --verifier-url https://api.socialscan.io/manta-pacific/v1/explorer/command_api/contract",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "mint",
+    "chainId": 185,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.mintchain.io",
+    "verificationFlags": "--chain 185 --verifier blockscout --verifier-url https://explorer.mintchain.io/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "boba",
+    "chainId": 288,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://bobascan.com",
+    "verificationFlags": "--chain 288 --verifier blockscout --verifier-url https://api.routescan.io/v2/network/mainnet/evm/288/etherscan/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "zksync",
+    "chainId": 324,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://era.zksync.network",
+    "verificationFlags": "--chain 324",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "shape",
+    "chainId": 360,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://shapescan.xyz",
+    "verificationFlags": "--chain 360 --verifier blockscout --verifier-url https://shapescan.xyz/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "appchain",
+    "chainId": 466,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.appchain.xyz",
+    "verificationFlags": "--chain 466 --verifier blockscout --verifier-url https://explorer.appchain.xyz/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "worldchain",
+    "chainId": 480,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://worldscan.org",
+    "verificationFlags": "--chain 480",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "redstone",
+    "chainId": 690,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.redstone.xyz",
+    "verificationFlags": "--chain 690 --verifier blockscout --verifier-url https://explorer.redstone.xyz/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "flow",
+    "chainId": 747,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://evm.flowscan.io",
+    "verificationFlags": "--chain 747 --verifier blockscout --verifier-url https://evm.flowscan.io/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "hyperevm",
+    "chainId": 999,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://www.hyperscan.com",
+    "verificationFlags": "--chain 999 --verifier blockscout --verifier-url https://www.hyperscan.com/api",
+    "additionalNotes": "Deployments might require using big blocks mode (https://x.com/HypurrFi/status/1892212415502192899)",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "metis",
+    "chainId": 1088,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.metis.io",
+    "verificationFlags": "--chain 1088 --verifier blockscout --verifier-url https://api.routescan.io/v2/network/mainnet/evm/1088/etherscan/api",
+    "additionalNotes": "Requires using the --legacy flag since the chain is not EIP1559-compatible",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "polygon_zkevm",
+    "chainId": 1101,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://zkevm.polygonscan.com",
+    "verificationFlags": "--chain 1101",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "lisk",
+    "chainId": 1135,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://blockscout.lisk.com/",
+    "verificationFlags": "--chain 1135 --verifier blockscout --verifier-url https://blockscout.lisk.com/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "sei",
+    "chainId": 1329,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://seitrace.com",
+    "verificationFlags": "--chain 1329 --verifier blockscout --verifier-url https://seitrace.com/pacific-1/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "perennial",
+    "chainId": 1424,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.perennial.foundation",
+    "verificationFlags": "--chain 1424 --verifier blockscout --verifier-url https://explorer.perennial.foundation/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "story",
+    "chainId": 1514,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://www.storyscan.io",
+    "verificationFlags": "--chain 1514 --verifier blockscout --verifier-url https://www.storyscan.io/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "gravity",
+    "chainId": 1625,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "additionalNotes": "Verification failed due to the explorer not seeing the address as a contract",
+    "explorerUrl": "https://explorer.gravity.xyz",
+    "verificationFlags": "--chain 1625 --verifier blockscout --verifier-url https://explorer.gravity.xyz/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "soneium",
+    "chainId": 1868,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://soneium.blockscout.com",
+    "verificationFlags": "--chain 1868 --verifier blockscout --verifier-url https://soneium.blockscout.com/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "swellchain",
+    "chainId": 1923,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "additionalNotes": "Verification failed due to unknown reason",
+    "explorerUrl": "https://swellchainscan.io",
+    "verificationFlags": "--chain 1923",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "sanko",
+    "chainId": 1996,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.sanko.xyz",
+    "verificationFlags": "--chain 1996 --verifier blockscout --verifier-url https://explorer.sanko.xyz/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "ronin",
+    "chainId": 2020,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://app.roninchain.com",
+    "verificationFlags": "--chain 2020",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "game7",
+    "chainId": 2187,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://mainnet.game7.io",
+    "verificationFlags": "--chain 2187 --verifier blockscout --verifier-url https://mainnet.game7.io/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "abstract",
+    "chainId": 2741,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://abscan.io",
+    "verificationFlags": "--chain 2741",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "morph",
+    "chainId": 2818,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.morphl2.io",
+    "verificationFlags": "--chain 2818 --verifier blockscout --verifier-url https://explorer-api.morphl2.io/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "hychain",
+    "chainId": 2911,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.hychain.com",
+    "verificationFlags": "--chain 2911 --verifier blockscout --verifier-url https://explorer.hychain.com/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "mantle",
+    "chainId": 5000,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.mantle.xyz",
+    "verificationFlags": "--chain 5000 --verifier blockscout --verifier-url https://explorer.mantle.xyz/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "ham",
+    "chainId": 5112,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.ham.fun",
+    "verificationFlags": "--chain 5112 --verifier blockscout --verifier-url https://explorer.ham.fun/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "superseed",
+    "chainId": 5330,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.superseed.xyz",
+    "verificationFlags": "--chain 5330 --verifier blockscout --verifier-url https://explorer.superseed.xyz/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "cyber",
+    "chainId": 7560,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://cyberscan.co",
+    "verificationFlags": "--chain 7560 --verifier blockscout --verifier-url https://api.socialscan.io/cyber/v1/explorer/command_api/contract",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "powerloom",
+    "chainId": 7869,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer-v2.powerloom.network/",
+    "verificationFlags": "--chain 7869 --verifier blockscout --verifier-url https://explorer-v2.powerloom.network/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "arena_z",
+    "chainId": 7897,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.arena-z.gg",
+    "verificationFlags": "--chain 7897 --verifier blockscout --verifier-url https://explorer.arena-z.gg/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "b3",
+    "chainId": 8333,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://blockscout.b3.fun",
+    "verificationFlags": "--chain 8333 --verifier blockscout --verifier-url https://blockscout.b3.fun/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "base",
+    "chainId": 8453,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://basescan.org",
+    "verificationFlags": "--chain 8453",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "onchain_points",
+    "chainId": 17071,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.onchainpoints.xyz",
+    "verificationFlags": "--chain 17071 --verifier blockscout --verifier-url https://explorer.onchainpoints.xyz/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "apechain",
+    "chainId": 33139,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://apescan.io",
+    "verificationFlags": "--chain 33139",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "funki",
+    "chainId": 33979,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "additionalNotes": "Verification failed due to the explorer not seeing the address as a contract",
+    "explorerUrl": "https://explorer.funkichain.com",
+    "verificationFlags": "--chain 33979 --verifier blockscout --verifier-url https://explorer.funkichain.com/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "mode",
+    "chainId": 34443,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.mode.network",
+    "verificationFlags": "--chain 34443 --verifier blockscout --verifier-url https://explorer.mode.network/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "arbitrum",
+    "chainId": 42161,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://arbiscan.io",
+    "verificationFlags": "--chain 42161",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "arbitrum_nova",
+    "chainId": 42170,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://nova.arbiscan.io",
+    "verificationFlags": "--chain 42170",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "celo",
+    "chainId": 42220,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://celoscan.io",
+    "verificationFlags": "--chain 42220",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "hemi",
+    "chainId": 43111,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.hemi.xyz",
+    "verificationFlags": "--chain 43111 --verifier blockscout --verifier-url https://explorer.hemi.xyz/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "avalanche",
+    "chainId": 43114,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://snowscan.xyz",
+    "verificationFlags": "--chain 43114",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "gunz",
+    "chainId": 43419,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://gunzscan.io",
+    "verificationFlags": "--chain 43419 --verifier blockscout --verifier-url https://gunzscan.io/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "zircuit",
+    "chainId": 48900,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.zircuit.com",
+    "verificationFlags": "--chain 48900 --verifier sourcify",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "superposition",
+    "chainId": 55244,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.superposition.so",
+    "verificationFlags": "--chain 55244 --verifier blockscout --verifier-url https://explorer.superposition.so/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "ink",
+    "chainId": 57073,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.inkonchain.com",
+    "verificationFlags": "--chain 57073 --verifier blockscout --verifier-url https://explorer.inkonchain.com/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "linea",
+    "chainId": 59144,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "london",
+    "additionalNotes": "When deploying / compiling, make sure to use the non-tstore version of the script / contracts (RelayRouter_NonTstore)",
+    "explorerUrl": "https://lineascan.build",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "bob",
+    "chainId": 60808,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.gobob.xyz",
+    "verificationFlags": "--chain 60808 --verifier blockscout --verifier-url https://explorer.gobob.xyz/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "anime",
+    "chainId": 69000,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.anime.xyz",
+    "verificationFlags": "--chain 69000 --verifier blockscout --verifier-url https://explorer.anime.xyz/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "apex",
+    "chainId": 70700,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "additionalNotes": "Verification failed due to the explorer not seeing the address as a contract",
+    "explorerUrl": "https://explorer.apex.proofofplay.com",
+    "verificationFlags": "--chain 70700 --verifier blockscout --verifier-url https://explorer.apex.proofofplay.com/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "boss",
+    "chainId": 70701,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "additionalNotes": "Verification failed due to the explorer not seeing the address as a contract",
+    "explorerUrl": "https://explorer.boss.proofofplay.com",
+    "verificationFlags": "--chain 70701 --verifier blockscout --verifier-url https://explorer.boss.proofofplay.com/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "berachain",
+    "chainId": 80094,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://berascan.com",
+    "verificationFlags": "--chain 80094",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "blast",
+    "chainId": 81457,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://blastscan.io",
+    "verificationFlags": "--chain 81457",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "plume",
+    "chainId": 98866,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.plume.org",
+    "verificationFlags": "--chain 98866 --verifier blockscout --verifier-url https://explorer.plume.org/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "taiko",
+    "chainId": 167000,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://taikoscan.io",
+    "verificationFlags": "--chain 167000",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "scroll",
+    "chainId": 534352,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://scrollscan.com",
+    "verificationFlags": "--chain 534352",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "zero",
+    "chainId": 543210,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "london",
+    "additionalNotes": "When deploying / compiling, make sure to use the non-tstore version of the contracts (RelayRouter_NonTstore) - this chain also requires direct deployment via `forge create`",
+    "explorerUrl": "https://explorer.zero.network"
+  },
+  {
+    "name": "xai",
+    "chainId": 660279,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://xaiscan.io",
+    "verificationFlags": "--chain 660279",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "katana",
+    "chainId": 747474,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.katanarpc.com",
+    "verificationFlags": "--chain 747474 --verifier blockscout --verifier-url https://explorer.katanarpc.com/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "forma",
+    "chainId": 984122,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.forma.art",
+    "verificationFlags": "--chain 984122 --verifier blockscout --verifier-url https://explorer.forma.art/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "zora",
+    "chainId": 7777777,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.zora.energy",
+    "verificationFlags": "--chain 7777777 --verifier blockscout --verifier-url https://explorer.zora.energy/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "corn",
+    "chainId": 21000000,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://cornscan.io",
+    "verificationFlags": "--chain 21000000 --verifier blockscout --verifier-url https://api.routescan.io/v2/network/mainnet/evm/21000000/etherscan/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "lordchain",
+    "chainId": 84530008,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://lordchain-explorer.appchain.base.org",
+    "verificationFlags": "--chain 84530008 --verifier blockscout --verifier-url https://lordchain-explorer.appchain.base.org/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "degen",
+    "chainId": 666666666,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.degen.tips",
+    "verificationFlags": "--chain 666666666 --verifier blockscout --verifier-url https://explorer.degen.tips/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "ancient8",
+    "chainId": 888888888,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://scan.ancient8.gg",
+    "verificationFlags": "--chain 888888888 --verifier blockscout --verifier-url https://scan.ancient8.gg/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "rari",
+    "chainId": 1380012617,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://mainnet.explorer.rarichain.org",
+    "verificationFlags": "--chain 1380012617 --verifier blockscout --verifier-url https://mainnet.explorer.rarichain.org/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  }
+]
