@@ -10,11 +10,12 @@ etherscan_api_key = "${ETHERSCAN_API_KEY}"
 
 [rpc_endpoints]
 # Mainnets
+ethereum = "${ETHEREUM_RPC_URL}"
+optimism = "${OPTIMISM_RPC_URL}"
+polygon = "${POLYGON_RPC_URL}"
+abstract = "${ABSTRACT_RPC_URL}"
 base = "${BASE_RPC_URL}"
 arbitrum = "${ARBITRUM_RPC_URL}"
-optimism = "${OPTIMISM_RPC_URL}"
-ethereum = "${ETHEREUM_RPC_URL}"
-abstract = "${ABSTRACT_RPC_URL}"
 # Testnets
-sepolia = "${SEPOLIA_RPC_URL}"
 base-sepolia = "${BASE_SEPOLIA_RPC_URL}"
+sepolia = "${SEPOLIA_RPC_URL}"

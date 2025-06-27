@@ -5,7 +5,7 @@
       "compilerVersion": "0.8.28",
       "evmVersion": "cancun",
       "explorerUrl": "https://etherscan.io",
-      "relayDepository": "0x14aa49fd5c2461892f63a3524561673f56a7ff72",
+      "relayDepository": "0x5cb1de3603a71ac2f67b12bfbf095013fe4ac299",
       "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
     },
     "optimism": {
@@ -13,7 +13,15 @@
       "compilerVersion": "0.8.28",
       "evmVersion": "cancun",
       "explorerUrl": "https://optimistic.etherscan.io",
-      "relayDepository": "0x14aa49fd5c2461892f63a3524561673f56a7ff72",
+      "relayDepository": "0x5cb1de3603a71ac2f67b12bfbf095013fe4ac299",
+      "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+    },
+    "polygon": {
+      "chainId": 137,
+      "compilerVersion": "0.8.28",
+      "evmVersion": "cancun",
+      "explorerUrl": "https://polygonscan.com",
+      "relayDepository": "0x5cb1de3603a71ac2f67b12bfbf095013fe4ac299",
       "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
     },
     "abstract": {
@@ -21,7 +29,7 @@
       "compilerVersion": "0.8.28",
       "evmVersion": "cancun",
       "explorerUrl": "https://abscan.io",
-      "relayDepository": "0x14aa49fd5c2461892f63a3524561673f56a7ff72",
+      "relayDepository": "0x5cb1de3603a71ac2f67b12bfbf095013fe4ac299",
       "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
     },
     "base": {
@@ -29,7 +37,7 @@
       "compilerVersion": "0.8.28",
       "evmVersion": "cancun",
       "explorerUrl": "https://basescan.org",
-      "relayDepository": "0x14aa49fd5c2461892f63a3524561673f56a7ff72",
+      "relayDepository": "0x5cb1de3603a71ac2f67b12bfbf095013fe4ac299",
       "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
     },
     "arbitrum": {
@@ -37,7 +45,7 @@
       "compilerVersion": "0.8.28",
       "evmVersion": "cancun",
       "explorerUrl": "https://arbiscan.io",
-      "relayDepository": "0x14aa49fd5c2461892f63a3524561673f56a7ff72",
+      "relayDepository": "0x5cb1de3603a71ac2f67b12bfbf095013fe4ac299",
       "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
     }
   }
