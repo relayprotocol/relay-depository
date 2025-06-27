@@ -549,8 +549,9 @@
     "chainId": 59144,
     "compilerVersion": "0.8.28",
     "evmVersion": "london",
-    "additionalNotes": "When deploying / compiling, make sure to use the non-tstore version of the script / contracts (RelayRouter_NonTstore)",
     "explorerUrl": "https://lineascan.build",
+    "verificationFlags": "--chain 59144",
+    "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
@@ -650,8 +651,10 @@
     "chainId": 543210,
     "compilerVersion": "0.8.28",
     "evmVersion": "london",
-    "additionalNotes": "When deploying / compiling, make sure to use the non-tstore version of the contracts (RelayRouter_NonTstore) - this chain also requires direct deployment via `forge create`",
-    "explorerUrl": "https://explorer.zero.network"
+    "additionalNotes": "Requires direct deployment via `forge create`",
+    "explorerUrl": "https://explorer.zero.network",
+    "verificationFlags": "--chain 543210 --verifier blockscout --verifier-url https://explorer.zero.network/api",
+    "relayDepository": "0xa88cf7864951147a08707ed732237eaa9b1c3b9b"
   },
   {
     "name": "xai",
