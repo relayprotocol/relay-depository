@@ -170,6 +170,7 @@ pub mod relay_escrow {
                     request.recipient,
                     CustomError::InvalidRecipient
                 );
+
                 invoke_signed(
                     &system_instruction::transfer(
                         &ctx.accounts.vault.key(),
