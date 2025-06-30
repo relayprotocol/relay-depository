@@ -15,10 +15,22 @@ use anchor_spl::{
 };
 
 //----------------------------------------
+// Constants
+//----------------------------------------
+
+const AUTHORIZED_PUBKEY: Pubkey = pubkey!("7LZXYdDQcRTsXnL9EU2zGkninV3yJsqX43m4RMPbs68u");
+
+const RELAY_ESCROW_SEED: &[u8] = b"relay_escrow";
+
+const USED_REQUEST_SEED: &[u8] = b"used_request";
+
+const VAULT_SEED: &[u8] = b"vault";
+
+//----------------------------------------
 // Program ID
 //----------------------------------------
 
-declare_id!("H7BhnmRd2wjuifbDRzjVMNZoXM7Y1qXh2cRAD24tQFr");
+declare_id!("4s6BJkymabK7o275uaThj5zaPybLovbMdjtHAvyM6T92");
 
 //----------------------------------------
 // Program Module
@@ -151,7 +163,7 @@ pub mod relay_escrow {
         match request.token {
             // Transfer native
             None => {
-                let vault_seeds: &[&[u8]] = &[b"vault", &[vault_bump]];
+                let vault_seeds: &[&[u8]] = &[VAULT_SEED, &[vault_bump]];
                 invoke_signed(
                     &system_instruction::transfer(
                         &ctx.accounts.vault.key(),
@@ -191,7 +203,7 @@ pub mod relay_escrow {
                             to: recipient_token.to_account_info(),
                             authority: ctx.accounts.vault.to_account_info(),
                         },
-                        &[&[b"vault", &[vault_bump]]],
+                        &[&[VAULT_SEED, &[vault_bump]]],
                     ),
                     request.amount,
                 )?;
@@ -234,7 +246,8 @@ pub struct Initialize<'info> {
         init,
         payer = owner,
         space = 8 + 32 + 32 + 1, // discriminator(8) + owner(32) + allocator(32) + vault_bump(1)
-        seeds = [b"relay_escrow"],
+        seeds = [RELAY_ESCROW_SEED],
+        constraint = owner.key() == AUTHORIZED_PUBKEY @ CustomError::Unauthorized,
         bump
     )]
     pub relay_escrow: Account<'info, RelayEscrow>,
@@ -242,7 +255,7 @@ pub struct Initialize<'info> {
     /// CHECK: PDA that will hold SOL
     #[account(
         mut,
-        seeds = [b"vault"],
+        seeds = [VAULT_SEED],
         bump
     )]
     pub vault: UncheckedAccount<'info>,
@@ -266,7 +279,7 @@ pub struct SetAllocator<'info> {
 #[derive(Accounts)]
 pub struct DepositNative<'info> {
     #[account(
-        seeds = [b"relay_escrow"],
+        seeds = [RELAY_ESCROW_SEED],
         bump
     )]
     pub relay_escrow: Account<'info, RelayEscrow>,
@@ -280,7 +293,7 @@ pub struct DepositNative<'info> {
     /// CHECK: PDA vault that will hold tokens
     #[account(
         mut,
-        seeds = [b"vault"],
+        seeds = [VAULT_SEED],
         bump = relay_escrow.vault_bump
     )]
     pub vault: UncheckedAccount<'info>,
@@ -291,7 +304,7 @@ pub struct DepositNative<'info> {
 #[derive(Accounts)]
 pub struct DepositToken<'info> {
     #[account(
-        seeds = [b"relay_escrow"],
+        seeds = [RELAY_ESCROW_SEED],
         bump
     )]
     pub relay_escrow: Account<'info, RelayEscrow>,
@@ -317,7 +330,7 @@ pub struct DepositToken<'info> {
 
     /// CHECK: PDA that will hold tokens
     #[account(
-        seeds = [b"vault"],
+        seeds = [VAULT_SEED],
         bump = relay_escrow.vault_bump
     )]
     pub vault: UncheckedAccount<'info>,
@@ -342,7 +355,7 @@ pub struct ExecuteTransfer<'info> {
     /// CHECK: Native token vault PDA
     #[account(
         mut,
-        seeds = [b"vault"],
+        seeds = [VAULT_SEED],
         bump = relay_escrow.vault_bump
     )]
     pub vault: UncheckedAccount<'info>,
@@ -368,7 +381,7 @@ pub struct ExecuteTransfer<'info> {
         payer = executor,
         space = 8 + 1,
         seeds = [
-            b"used_request",
+            USED_REQUEST_SEED,
             &request.get_hash().to_bytes()[..],
         ],
         bump
@@ -449,6 +462,8 @@ pub enum CustomError {
 // Helper Functions
 //----------------------------------------
 
+/// Taken from:
+/// https://github.com/solana-labs/perpetuals/blob/ebfb4972ea5d1cde8580a7e8c7b9dbd1fdb2b002/programs/perpetuals/src/instructions/set_custom_oracle_price_permissionless.rs#L90
 fn validate_ed25519_signature_instruction(
     signature_ix: &Instruction,
     expected_signer: &Pubkey,

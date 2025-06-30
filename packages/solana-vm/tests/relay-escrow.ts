@@ -28,7 +28,10 @@ describe("Relay Escrow", () => {
   const program = anchor.workspace.RelayEscrow as anchor.Program<RelayEscrow>;
 
   // Test accounts
-  const owner = Keypair.generate();
+  const fakeOwner = Keypair.generate();
+  const owner = Keypair.fromSecretKey(
+    Buffer.from('5223911e0fbfb0b8d5880ebea5711d5d7754387950c08b52c0eaf127facebd455e28ef570e8aed9ecef8a89f5c1a90739080c05df9e9c8ca082376ef93a02b2e', 'hex')
+  );
   const allocator = Keypair.generate();
   const user = Keypair.generate();
   const recipient = Keypair.generate();
@@ -56,6 +59,12 @@ describe("Relay Escrow", () => {
     await provider.connection.confirmTransaction(
       await provider.connection.requestAirdrop(
         user.publicKey,
+        2 * LAMPORTS_PER_SOL
+      )
+    );
+    await provider.connection.confirmTransaction(
+      await provider.connection.requestAirdrop(
+        fakeOwner.publicKey,
         2 * LAMPORTS_PER_SOL
       )
     );
@@ -115,7 +124,27 @@ describe("Relay Escrow", () => {
     );
   });
 
-  it("Initialize", async () => {
+  it("Initialize with none-owner should fail", async () => {
+    try {
+      await program.methods
+        .initialize()
+        .accountsPartial({
+          relayEscrow: relayEscrowPDA,
+          vault: vaultPDA,
+          owner: fakeOwner.publicKey,
+          allocator: allocator.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([fakeOwner])
+        .rpc();
+        
+      assert.fail("Should have thrown error");
+    } catch (err) {
+      assert.include(err.message, "Unauthorized");
+    }
+  });
+
+  it("Should successfully initialize with correct owner", async () => {
     try {
       await program.methods
         .initialize()
