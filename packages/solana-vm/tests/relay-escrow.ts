@@ -58,6 +58,7 @@ describe("Relay Escrow", () => {
   let vault2022TokenAccount: PublicKey;
   let recipient2022TokenAccount: PublicKey;
 
+
   before(async () => {
     // Airdrop SOL to test accounts
     await provider.connection.confirmTransaction(
