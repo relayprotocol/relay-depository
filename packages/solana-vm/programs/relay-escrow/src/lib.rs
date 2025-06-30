@@ -11,7 +11,7 @@ use anchor_lang::{
 
 use anchor_spl::{
     associated_token::{get_associated_token_address_with_program_id, AssociatedToken, Create},
-    token::{self, Token, TokenAccount, Transfer},
+    token_interface::{transfer, Mint, TokenAccount, TokenInterface, Transfer},
 };
 
 //----------------------------------------
@@ -118,7 +118,7 @@ pub mod relay_escrow {
         );
 
         // Transfer to vault
-        token::transfer(
+        transfer(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
                 Transfer {
@@ -219,7 +219,7 @@ pub mod relay_escrow {
                     request.recipient,
                     CustomError::InvalidRecipient
                 );
-                token::transfer(
+                transfer(
                     CpiContext::new_with_signer(
                         ctx.accounts.token_program.to_account_info(),
                         Transfer {
@@ -333,24 +333,11 @@ pub struct DepositToken<'info> {
     )]
     pub relay_escrow: Account<'info, RelayEscrow>,
 
-    pub mint: Account<'info, token::Mint>,
-
     #[account(mut)]
     pub sender: Signer<'info>,
 
-    #[account(
-        mut,
-        associated_token::mint = mint,
-        associated_token::authority = sender
-    )]
-    pub sender_token_account: Account<'info, TokenAccount>,
-
     /// CHECK: Used as public key only
     pub depositor: UncheckedAccount<'info>,
-
-    /// CHECK: Will be initialized if needed
-    #[account(mut)]
-    pub vault_token_account: UncheckedAccount<'info>,
 
     /// CHECK: PDA that will hold tokens
     #[account(
@@ -359,7 +346,21 @@ pub struct DepositToken<'info> {
     )]
     pub vault: UncheckedAccount<'info>,
 
-    pub token_program: Program<'info, Token>,
+    pub mint: InterfaceAccount<'info, Mint>,
+
+    #[account(
+        mut,
+        associated_token::mint = mint,
+        associated_token::authority = sender,
+        associated_token::token_program = token_program
+    )]
+    pub sender_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    /// CHECK: Will be initialized if needed
+    #[account(mut)]
+    pub vault_token_account: UncheckedAccount<'info>,
+
+    pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
@@ -384,21 +385,23 @@ pub struct ExecuteTransfer<'info> {
     )]
     pub vault: UncheckedAccount<'info>,
 
-    pub mint: Option<Account<'info, token::Mint>>,
+    pub mint: Option<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         associated_token::mint = mint,
-        associated_token::authority = vault
+        associated_token::authority = recipient,
+        associated_token::token_program = token_program
     )]
-    pub vault_token_account: Option<Account<'info, TokenAccount>>,
+    pub recipient_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         associated_token::mint = mint,
-        associated_token::authority = recipient
+        associated_token::authority = vault,
+        associated_token::token_program = token_program
     )]
-    pub recipient_token_account: Option<Account<'info, TokenAccount>>,
+    pub vault_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         init,
@@ -412,12 +415,12 @@ pub struct ExecuteTransfer<'info> {
     )]
     pub used_request: Account<'info, UsedRequest>,
 
-    pub token_program: Program<'info, Token>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
-
     /// CHECK: For ed25519 verification
     pub ix_sysvar: AccountInfo<'info>,
+
+    pub token_program: Interface<'info, TokenInterface>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
 }
 
 //----------------------------------------
