@@ -8,10 +8,19 @@ use anchor_lang::{
         system_instruction, sysvar,
     },
 };
-
 use anchor_spl::{
     associated_token::{get_associated_token_address_with_program_id, AssociatedToken, Create},
-    token_interface::{transfer, Mint, TokenAccount, TokenInterface, Transfer},
+    token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
+};
+use anchor_spl::token::{self, Token};
+use anchor_spl::token_2022::{
+    spl_token_2022::{
+        self,
+        extension::{
+            transfer_fee::{TransferFeeConfig},
+            BaseStateWithExtensions, ExtensionType, StateWithExtensions,
+        },
+    },
 };
 
 //----------------------------------------
@@ -117,23 +126,29 @@ pub mod relay_escrow {
             CustomError::InvalidVaultTokenAccount
         );
 
+        // Calculate transfer fee
+        let mint = &ctx.accounts.mint;
+        let transfer_fee = get_transfer_fee(mint, amount)?;
+        
         // Transfer to vault
-        transfer(
+        transfer_checked(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
-                Transfer {
+                TransferChecked {
+                    mint: ctx.accounts.mint.to_account_info(),
                     from: ctx.accounts.sender_token_account.to_account_info(),
                     to: ctx.accounts.vault_token_account.to_account_info(),
                     authority: ctx.accounts.sender.to_account_info(),
                 },
             ),
             amount,
+            mint.decimals,
         )?;
 
         emit!(DepositEvent {
             depositor: ctx.accounts.depositor.key(),
             token: Some(ctx.accounts.mint.key()),
-            amount,
+            amount: amount - transfer_fee,
             id,
         });
 
@@ -229,10 +244,11 @@ pub mod relay_escrow {
                     request.recipient,
                     CustomError::InvalidRecipient
                 );
-                transfer(
+                transfer_checked(
                     CpiContext::new_with_signer(
                         ctx.accounts.token_program.to_account_info(),
-                        Transfer {
+                        TransferChecked {
+                            mint: mint.to_account_info(),
                             from: vault_token_account.to_account_info(),
                             to: recipient_token_account.to_account_info(),
                             authority: ctx.accounts.vault.to_account_info(),
@@ -240,6 +256,7 @@ pub mod relay_escrow {
                         &[seeds],
                     ),
                     request.amount,
+                    mint.decimals,
                 )?;
             }
         }
@@ -554,4 +571,28 @@ fn validate_ed25519_signature_instruction(
     }
 
     Ok(())
+}
+
+/// Taken from:
+/// https://github.com/raydium-io/raydium-clmm/blob/eb7c392be9c8ef8af6eefb92ff834fc41ab975e3/programs/amm/src/util/token.rs#L218C1-L238C2
+/// Calculate the fee for input amount
+pub fn get_transfer_fee(
+    mint_account: &InterfaceAccount<Mint>,
+    pre_fee_amount: u64,
+) -> Result<u64> {
+    let mint_info = mint_account.to_account_info();
+    if *mint_info.owner == Token::id() {
+        return Ok(0);
+    }
+    let mint_data = mint_info.try_borrow_data()?;
+    let mint = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
+
+    let fee = if let Ok(transfer_fee_config) = mint.get_extension::<TransferFeeConfig>() {
+        transfer_fee_config
+            .calculate_epoch_fee(Clock::get()?.epoch, pre_fee_amount)
+            .unwrap()
+    } else {
+        0
+    };
+    Ok(fee)
 }
