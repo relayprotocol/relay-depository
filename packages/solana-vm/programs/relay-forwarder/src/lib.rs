@@ -25,8 +25,17 @@ pub mod relay_forwarder {
 
     /// Forwards native tokens from the forwarder account to the relay escrow vault account
     pub fn forward_native(ctx: Context<ForwardNative>, id: [u8; 32]) -> Result<()> {
-        let amount = ctx.accounts.forwarder.lamports();
-        require!(amount > 0, ForwarderError::InsufficientBalance);
+        let total_amount = ctx.accounts.forwarder.lamports();
+        let rent = Rent::get()?;
+        let min_rent = rent.minimum_balance(0);
+
+        // Check that the forwarder has more than the minimum required amount
+        require!(total_amount > min_rent, ForwarderError::InsufficientBalance);
+
+        // Only forward the amount above rent-exempt threshold
+        let amount = total_amount - min_rent;
+
+        let seeds: &[&[&[u8]]] = &[&[FORWARDER_SEED, &[ctx.bumps.forwarder]]];
 
         let seeds: &[&[&[u8]]] = &[&[FORWARDER_SEED, &[ctx.bumps.forwarder]]];
 

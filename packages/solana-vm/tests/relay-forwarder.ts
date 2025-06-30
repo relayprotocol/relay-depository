@@ -67,6 +67,28 @@ describe("Relay Forwarder", () => {
       escrowProgram.programId
     );
 
+    {
+      // Min-rent top-up
+      const rentExemptMinimum = await provider.connection.getMinimumBalanceForRentExemption(0);
+      const [forwarderPda] = anchor.web3.PublicKey.findProgramAddressSync(
+        [Buffer.from("forwarder")],
+        forwarderProgram.programId
+      );
+
+      const currentBalance = await provider.connection.getBalance(forwarderPda);
+      const topUpAmount = rentExemptMinimum - currentBalance;
+
+      await provider.sendAndConfirm(
+        new anchor.web3.Transaction().add(
+          anchor.web3.SystemProgram.transfer({
+            fromPubkey: sender.publicKey,
+            toPubkey: forwarderPda,
+            lamports: topUpAmount,
+          })
+        )
+      );
+    }
+
     // Initialize relay-escrow (only needed if running this test individually)
     // await escrowProgram.methods
     //   .initialize()
