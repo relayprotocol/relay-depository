@@ -37,6 +37,8 @@ pub mod relay_forwarder {
 
         let seeds: &[&[&[u8]]] = &[&[FORWARDER_SEED, &[ctx.bumps.forwarder]]];
 
+        let seeds: &[&[&[u8]]] = &[&[FORWARDER_SEED, &[ctx.bumps.forwarder]]];
+
         relay_escrow::cpi::deposit_native(
             CpiContext::new_with_signer(
                 ctx.accounts.relay_escrow_program.to_account_info(),

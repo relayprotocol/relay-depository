@@ -199,6 +199,26 @@ describe("Relay Forwarder", () => {
     // Wait for transaction confirmation
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
+    // Verify the forwarder account is closed or properly emptied
+    const forwarderInfoAfter = await provider.connection.getAccountInfo(
+      forwarderPda
+    );
+
+    // There are two possible outcomes:
+    // 1. Account is completely closed (null)
+    // 2. Account exists but with 0 lamports (emptied)
+    if (forwarderInfoAfter === null) {
+      // Account was completely closed
+      assert.isTrue(true, "Forwarder account was successfully closed");
+    } else {
+      // Account exists but should have 0 lamports
+      assert.equal(
+        forwarderInfoAfter.lamports,
+        0,
+        "Forwarder account should have 0 lamports if not completely closed"
+      );
+    }
+
     // Verify vault received the deposit amount
     const vaultBalanceAfter = await provider.connection.getBalance(vault);
     const vaultChange = vaultBalanceAfter - vaultBalanceBefore;

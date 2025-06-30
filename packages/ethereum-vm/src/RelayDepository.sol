@@ -7,11 +7,11 @@ import {EIP712} from "solady/utils/EIP712.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {SignatureCheckerLib} from "solady/utils/SignatureCheckerLib.sol";
 
-import {Call, CallRequest, CallResult} from "./utils/RelayEscrowStructs.sol";
+import {Call, CallRequest, CallResult} from "./utils/RelayDepositoryStructs.sol";
 
-/// @title RelayEscrow
+/// @title RelayDepository
 /// @author Relay
-contract RelayEscrow is Ownable, EIP712 {
+contract RelayDepository is Ownable, EIP712 {
     using SafeTransferLib for address;
     using SignatureCheckerLib for address;
 
@@ -31,10 +31,10 @@ contract RelayEscrow is Ownable, EIP712 {
     error CallFailed(bytes returnData);
 
     /// @notice Emit event when a native deposit is made
-    event EscrowNativeDeposit(address from, uint256 amount, bytes32 id);
+    event RelayNativeDeposit(address from, uint256 amount, bytes32 id);
 
     /// @notice Emit event when an erc20 deposit is made
-    event EscrowErc20Deposit(
+    event RelayErc20Deposit(
         address from,
         address token,
         uint256 amount,
@@ -42,7 +42,7 @@ contract RelayEscrow is Ownable, EIP712 {
     );
 
     /// @notice Emit event when a call is executed
-    event EscrowCallExecuted(bytes32 id, Call call);
+    event RelayCallExecuted(bytes32 id, Call call);
 
     /// @notice The EIP-712 typehash for the Call struct
     bytes32 public constant _CALL_TYPEHASH =
@@ -62,9 +62,9 @@ contract RelayEscrow is Ownable, EIP712 {
     /// @notice The allocator address
     address public allocator;
 
-    constructor(address _allocator) {
+    constructor(address _owner, address _allocator) {
+        _initializeOwner(_owner);
         allocator = _allocator;
-        _initializeOwner(msg.sender);
     }
 
     /// @notice Set the allocator address
@@ -76,7 +76,7 @@ contract RelayEscrow is Ownable, EIP712 {
         allocator = _allocator;
     }
 
-    /// @notice Deposit native tokens and emit a EscrowNativeDeposit event
+    /// @notice Deposit native tokens and emit a `RelayNativeDeposit` event
     /// @param depositor The address of the depositor - set to `address(0)` to credit `msg.sender`
     /// @param id The id associated with the deposit
     function depositNative(address depositor, bytes32 id) external payable {
@@ -84,11 +84,11 @@ contract RelayEscrow is Ownable, EIP712 {
             ? msg.sender
             : depositor;
 
-        // Emit the EscrowNativeDeposit event
-        emit EscrowNativeDeposit(depositorAddress, msg.value, id);
+        // Emit the `RelayNativeDeposit` event
+        emit RelayNativeDeposit(depositorAddress, msg.value, id);
     }
 
-    /// @notice Deposit erc20 tokens and emit an EscrowErc20Deposit event
+    /// @notice Deposit erc20 tokens and emit an `RelayErc20Deposit` event
     /// @param depositor The address of the depositor - set to `address(0)` to credit `msg.sender`
     /// @param token The erc20 token to deposit
     /// @param amount The amount to deposit
@@ -106,11 +106,11 @@ contract RelayEscrow is Ownable, EIP712 {
             ? msg.sender
             : depositor;
 
-        // Emit the EscrowErc20Deposit event
-        emit EscrowErc20Deposit(depositorAddress, token, amount, id);
+        // Emit the `RelayErc20Deposit` event
+        emit RelayErc20Deposit(depositorAddress, token, amount, id);
     }
 
-    /// @notice Deposit erc20 tokens and emit an EscrowErc20Deposit event
+    /// @notice Deposit erc20 tokens and emit an `RelayErc20Deposit` event
     /// @param depositor The address of the depositor - set to `address(0)` to credit `msg.sender`
     /// @param token The erc20 token to deposit
     /// @param id The id associated with the deposit
@@ -124,8 +124,8 @@ contract RelayEscrow is Ownable, EIP712 {
         depositErc20(depositor, token, amount, id);
     }
 
-    /// @notice Execute a CallRequest signed by the allocator
-    /// @param request The CallRequest to execute
+    /// @notice Execute a `CallRequest` signed by the allocator
+    /// @param request The `CallRequest` to execute
     /// @param signature The signature from the allocator
     /// @return results The results of the calls
     function execute(
@@ -190,16 +190,16 @@ contract RelayEscrow is Ownable, EIP712 {
                     returnData: data
                 });
 
-                // Emit the EscrowCallExecuted event if the call was successful
+                // Emit the `RelayCallExecuted` event if the call was successful
                 if (success) {
-                    emit EscrowCallExecuted(id, c);
+                    emit RelayCallExecuted(id, c);
                 }
             }
         }
     }
 
-    /// @notice Helper function to hash a CallRequest and return the EIP-712 digest
-    /// @param request The CallRequest to hash
+    /// @notice Helper function to hash a `CallRequest` and return the EIP-712 digest
+    /// @param request The `CallRequest` to hash
     /// @return structHash The struct hash
     /// @return eip712Hash The EIP712 hash
     function _hashCallRequest(
@@ -248,7 +248,7 @@ contract RelayEscrow is Ownable, EIP712 {
         override
         returns (string memory name, string memory version)
     {
-        name = "RelayEscrow";
+        name = "RelayDepository";
         version = "1";
     }
 }
