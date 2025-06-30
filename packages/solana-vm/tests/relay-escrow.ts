@@ -35,6 +35,7 @@ describe("Relay Escrow", () => {
   const allocator = Keypair.generate();
   const user = Keypair.generate();
   const recipient = Keypair.generate();
+  const wrongRecipient = Keypair.generate();
 
   // PDAs
   let relayEscrowPDA: PublicKey;
@@ -47,6 +48,7 @@ describe("Relay Escrow", () => {
   let userTokenAccount: PublicKey;
   let vaultTokenAccount: PublicKey;
   let recipientTokenAccount: PublicKey;
+  let wrongRecipientTokenAccount: PublicKey;
 
   before(async () => {
     // Airdrop SOL to test accounts
@@ -111,6 +113,13 @@ describe("Relay Escrow", () => {
       owner,
       mintPubkey,
       recipient.publicKey
+    );
+
+    wrongRecipientTokenAccount = await createAssociatedTokenAccount(
+      provider.connection,
+      owner,
+      mintPubkey,
+      wrongRecipient.publicKey
     );
 
     // Mint tokens to user
@@ -636,6 +645,120 @@ describe("Relay Escrow", () => {
     } catch (e) {
       assert.include(e.message, "already in use");
       assert.include(e.message, requestPDA.toBase58());
+    }
+  });
+
+  it("Should fail execute transfer with mismatched recipient", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 10; // 0.1 SOL
+
+    // Create transfer request
+    const request = {
+      recipient: recipient.publicKey,
+      token: null, // SOL transfer
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
+    };
+
+    const messagHash = hashRequest(request);
+
+    // Sign with allocator
+    const signature = nacl.sign.detached(messagHash, allocator.secretKey);
+    const requestPDA = await getUsedRequestPDA(request);
+
+    try {
+      await program.methods
+        .executeTransfer(request)
+        .accountsPartial({
+          mint: null,
+        vaultTokenAccount: null,
+        recipientTokenAccount: null,
+        relayEscrow: relayEscrowPDA,
+        executor: provider.wallet.publicKey,
+        recipient: wrongRecipient.publicKey,
+        vault: vaultPDA,
+        usedRequest: requestPDA,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .preInstructions([
+        anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+          publicKey: allocator.publicKey.toBytes(),
+          message: messagHash,
+          signature: signature,
+        }),
+      ]).rpc();
+
+      assert.fail("Should have failed with invalid recipient");
+    } catch (err) {
+      assert.include(err.message, "InvalidRecipient");
+  
+      // Verify request was not marked as used
+      try {
+        await program.account.usedRequest.fetch(requestPDA);
+        assert.fail("Request should not exist");
+      } catch (e) {
+        assert.include(e.message, "Account does not exist");
+      }
+    }
+  });
+
+  it("Should fail execute token transfer with mismatched recipient", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 10;
+  
+    // Create transfer request with recipient A
+    const request = {
+      recipient: recipient.publicKey, // Use original recipient in request
+      token: mintPubkey,
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
+    };
+  
+    const messagHash = hashRequest(request);
+    const signature = nacl.sign.detached(messagHash, allocator.secretKey);
+    const requestPDA = await getUsedRequestPDA(request);
+  
+    try {
+      // But try to execute with recipient B
+      await program.methods
+      .executeTransfer(request)
+      .accountsPartial({
+        mint: mintPubkey,
+        vaultTokenAccount,
+        recipientTokenAccount: wrongRecipientTokenAccount,
+        relayEscrow: relayEscrowPDA,
+        executor: provider.wallet.publicKey,
+        recipient: wrongRecipient.publicKey,
+        vault: vaultPDA,
+        usedRequest: requestPDA,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .preInstructions([
+        anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+          publicKey: allocator.publicKey.toBytes(),
+          message: messagHash,
+          signature: signature,
+        }),
+      ])
+      .rpc();
+  
+      assert.fail("Should have failed with invalid recipient");
+    } catch (err) {
+      assert.include(err.message, "InvalidRecipient");
+  
+      // Verify request was not marked as used
+      try {
+        await program.account.usedRequest.fetch(requestPDA);
+        assert.fail("Request should not exist");
+      } catch (e) {
+        assert.include(e.message, "Account does not exist");
+      }
     }
   });
 

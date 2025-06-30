@@ -159,11 +159,18 @@ pub mod relay_escrow {
 
         used_request.is_used = true;
 
+        let seeds: &[&[u8]] = &[VAULT_SEED, &[vault_bump]];
+
         // Execute the transfer based on the token type
         match request.token {
             // Transfer native
             None => {
-                let vault_seeds: &[&[u8]] = &[VAULT_SEED, &[vault_bump]];
+                require_keys_eq!(
+                    ctx.accounts.recipient.key(),
+                    request.recipient,
+                    CustomError::InvalidRecipient
+                );
+
                 invoke_signed(
                     &system_instruction::transfer(
                         &ctx.accounts.vault.key(),
@@ -175,7 +182,7 @@ pub mod relay_escrow {
                         ctx.accounts.recipient.to_account_info(),
                         ctx.accounts.system_program.to_account_info(),
                     ],
-                    &[vault_seeds],
+                    &[seeds],
                 )?;
             }
             // Transfer token
@@ -184,26 +191,31 @@ pub mod relay_escrow {
 
                 require_keys_eq!(token_mint, mint.key(), CustomError::InvalidMint);
 
-                let vault_token = ctx
+                let vault_token_account = ctx
                     .accounts
                     .vault_token_account
                     .as_ref()
                     .ok_or(CustomError::InvalidMint)?;
-                let recipient_token = ctx
+                let recipient_token_account = ctx
                     .accounts
                     .recipient_token_account
                     .as_ref()
                     .ok_or(CustomError::InvalidMint)?;
 
+                require_keys_eq!(
+                    recipient_token_account.owner,
+                    request.recipient,
+                    CustomError::InvalidRecipient
+                );
                 token::transfer(
                     CpiContext::new_with_signer(
                         ctx.accounts.token_program.to_account_info(),
                         Transfer {
-                            from: vault_token.to_account_info(),
-                            to: recipient_token.to_account_info(),
+                            from: vault_token_account.to_account_info(),
+                            to: recipient_token_account.to_account_info(),
                             authority: ctx.accounts.vault.to_account_info(),
                         },
-                        &[&[VAULT_SEED, &[vault_bump]]],
+                        &[seeds],
                     ),
                     request.amount,
                 )?;
@@ -456,6 +468,8 @@ pub enum CustomError {
     MissingSignature,
     #[msg("Signature expired")]
     SignatureExpired,
+    #[msg("Invalid recipient")]
+    InvalidRecipient,
 }
 
 //----------------------------------------
