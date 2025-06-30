@@ -7,12 +7,18 @@ import {
   createAssociatedTokenAccount,
   getAssociatedTokenAddress,
   mintTo,
+  ExtensionType,
+  getMintLen,
+  createInitializeTransferFeeConfigInstruction,
+  createInitializeMintInstruction,
 } from "@solana/spl-token";
 import {
   PublicKey,
   SystemProgram,
   LAMPORTS_PER_SOL,
   Keypair,
+  sendAndConfirmTransaction,
+  Transaction,
 } from "@solana/web3.js";
 import { assert } from "chai";
 import { sha256 } from "js-sha256";
@@ -50,6 +56,10 @@ describe("Relay Escrow", () => {
   let vaultTokenAccount: PublicKey;
   let recipientTokenAccount: PublicKey;
   let wrongRecipientTokenAccount: PublicKey;
+
+  // Fee configuration
+  const feeBasisPoints = 100; // 1%
+  const maxFee = 5000; // Maximum fee amount
 
   // SPL Token 2022 test accounts
   let mint2022Keypair: Keypair;
@@ -110,7 +120,7 @@ describe("Relay Escrow", () => {
       9,
       mint2022Keypair,
       undefined,
-      TOKEN_2022_PROGRAM_ID
+      TOKEN_2022_PROGRAM_ID,
     );
 
     // Create token accounts
@@ -462,6 +472,172 @@ describe("Relay Escrow", () => {
       Number(vaultBalanceAfter.value.amount),
       depositAmount,
       "Incorrect token addition to vault"
+    );
+  });
+
+  it("Deposit token2022 with transfer fee - verify amount excludes fee", async () => {
+    // Create a Token2022 mint with transfer fee
+    const mintWithFeeKeypair = Keypair.generate();
+    const transferFeeBasisPoints = 100; // 1% transfer fee
+    const maxFee = 5000 * 10**9; // Maximum fee of 5000 tokens
+    
+    // Use the provided function to create a token with transfer fee
+    const mintWithFeePubkey = await createMintWithTransferFee(
+      provider.connection,
+      owner,
+      owner,
+      mintWithFeeKeypair,
+      { transferFeeBasisPoints, MaxFee: maxFee }
+    );
+    
+    // Create token account for the user
+    const userFeeTokenAccount = await createAssociatedTokenAccount(
+      provider.connection,
+      owner,
+      mintWithFeePubkey,
+      user.publicKey,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
+    
+    // Get the vault's token account address
+    const vaultFeeTokenAccount = await getAssociatedTokenAddress(
+      mintWithFeePubkey,
+      vaultPDA,
+      true, // allowOwnerOffCurve - needed for PDA
+      TOKEN_2022_PROGRAM_ID
+    );
+    
+    // Mint tokens to the user
+    const mintAmount = 100 * LAMPORTS_PER_SOL; // 100 tokens
+    await mintTo(
+      provider.connection,
+      owner,
+      mintWithFeePubkey,
+      userFeeTokenAccount,
+      owner,
+      mintAmount,
+      [],
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
+    
+    // Check user's balance before deposit
+    const userBalanceBefore = await provider.connection.getTokenAccountBalance(
+      userFeeTokenAccount,
+    );
+    
+    // Generate a unique ID for this deposit
+    const id = Array.from(Buffer.alloc(32, 4));
+    
+    // Amount to deposit
+    const depositAmount = 10 * LAMPORTS_PER_SOL; // 10 tokens
+    
+    // Calculate the expected transfer fee
+    const expectedFee = Math.floor(depositAmount * transferFeeBasisPoints / 10000);
+    
+    // Create vault token account if it doesn't exist
+    try {
+      await createAssociatedTokenAccount(
+        provider.connection,
+        owner,
+        mintWithFeePubkey,
+        vaultPDA,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+    } catch {
+      // Ignore error if account already exists
+    }
+
+    // Execute the deposit operation
+    const depositTx = await program.methods
+      .depositToken(new anchor.BN(depositAmount), id)
+      .accountsPartial({
+        relayEscrow: relayEscrowPDA,
+        mint: mintWithFeePubkey,
+        sender: user.publicKey,
+        senderTokenAccount: userFeeTokenAccount,
+        depositor: user.publicKey,
+        vaultTokenAccount: vaultFeeTokenAccount,
+        vault: vaultPDA,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([user])
+      .rpc();
+      
+    // Get user's balance after the deposit
+    const userBalanceAfter = await provider.connection.getTokenAccountBalance(
+      userFeeTokenAccount,
+    );
+    
+    // Get vault's balance
+    const vaultBalanceAfter = await provider.connection.getTokenAccountBalance(
+      vaultFeeTokenAccount,
+    );
+
+    // Verify the user's account was debited the full deposit amount
+    const userBalanceDecrease = 
+      Number(userBalanceBefore.value.amount) - Number(userBalanceAfter.value.amount);
+    assert.equal(
+      userBalanceDecrease,
+      depositAmount,
+      "User's balance should decrease by the full deposit amount"
+    );
+    
+    // Verify the vault received the deposit amount minus the fee
+    assert.equal(
+      Number(vaultBalanceAfter.value.amount),
+      depositAmount - expectedFee,
+      "Vault should receive deposit amount minus transfer fee"
+    );
+    
+    // Parse the deposit event to verify the recorded amount is correct (should be the amount after fee)
+    const depositTxTransaction = await provider.connection.getParsedTransaction(
+      depositTx,
+      { commitment: "confirmed" }
+    );
+    
+    let events = [];
+    for (const logMessage of depositTxTransaction?.meta?.logMessages || []) {
+      if (!logMessage.startsWith("Program data: ")) {
+        continue;
+      }
+      const event = program.coder.events.decode(
+        logMessage.slice("Program data: ".length)
+      );
+      if (event) {
+        events.push(event);
+      }
+    }
+    
+    const depositEvent = events.find((event) => event.name === "depositEvent");
+    assert.exists(depositEvent, "Deposit event should exist");
+
+    // Verify the deposit event records the amount after fee deduction
+    assert.equal(
+      depositEvent.data.amount.toNumber(),
+      depositAmount - expectedFee,
+      "Deposit event amount should record the amount after fee deduction"
+    );
+    
+    // Verify other event data
+    assert.equal(
+      depositEvent.data.depositor.toBase58(),
+      user.publicKey.toBase58(),
+      "Deposit event should record correct depositor"
+    );
+    assert.equal(
+      depositEvent.data.id.toString(),
+      id.toString(),
+      "Deposit event should record correct ID"
+    );
+    assert.equal(
+      depositEvent.data.token.toBase58(),
+      mintWithFeePubkey.toBase58(),
+      "Deposit event should record correct token mint"
     );
   });
 
@@ -1344,3 +1520,56 @@ describe("Relay Escrow", () => {
     return pda;
   };
 });
+
+
+async function createMintWithTransferFee(
+  connection: anchor.web3.Connection,
+  payer: anchor.web3.Signer,
+  mintAuthority: anchor.web3.Signer,
+  mintKeypair = Keypair.generate(),
+  transferFeeConfig: { transferFeeBasisPoints: number; MaxFee: number }
+) {
+  const transferFeeConfigAuthority = Keypair.generate();
+  const withdrawWithheldAuthority = Keypair.generate();
+
+  const extensions = [ExtensionType.TransferFeeConfig];
+
+  const mintLen = getMintLen(extensions);
+  const decimals = 9;
+
+  const mintLamports = await connection.getMinimumBalanceForRentExemption(
+    mintLen
+  );
+  const mintTransaction = new Transaction().add(
+    SystemProgram.createAccount({
+      fromPubkey: payer.publicKey,
+      newAccountPubkey: mintKeypair.publicKey,
+      space: mintLen,
+      lamports: mintLamports,
+      programId: TOKEN_2022_PROGRAM_ID,
+    }),
+    createInitializeTransferFeeConfigInstruction(
+      mintKeypair.publicKey,
+      transferFeeConfigAuthority.publicKey,
+      withdrawWithheldAuthority.publicKey,
+      transferFeeConfig.transferFeeBasisPoints,
+      BigInt(transferFeeConfig.MaxFee),
+      TOKEN_2022_PROGRAM_ID
+    ),
+    createInitializeMintInstruction(
+      mintKeypair.publicKey,
+      decimals,
+      mintAuthority.publicKey,
+      null,
+      TOKEN_2022_PROGRAM_ID
+    )
+  );
+  await sendAndConfirmTransaction(
+    connection,
+    mintTransaction,
+    [payer, mintKeypair],
+    undefined
+  );
+
+  return mintKeypair.publicKey;
+}
