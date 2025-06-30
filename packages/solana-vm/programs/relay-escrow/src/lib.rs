@@ -8,19 +8,14 @@ use anchor_lang::{
         system_instruction, sysvar,
     },
 };
+use anchor_spl::token::Token;
+use anchor_spl::token_2022::spl_token_2022::{
+    self,
+    extension::{transfer_fee::TransferFeeConfig, BaseStateWithExtensions, StateWithExtensions},
+};
 use anchor_spl::{
     associated_token::{get_associated_token_address_with_program_id, AssociatedToken, Create},
     token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
-};
-use anchor_spl::token::{self, Token};
-use anchor_spl::token_2022::{
-    spl_token_2022::{
-        self,
-        extension::{
-            transfer_fee::{TransferFeeConfig},
-            BaseStateWithExtensions, ExtensionType, StateWithExtensions,
-        },
-    },
 };
 
 //----------------------------------------
@@ -39,7 +34,7 @@ const VAULT_SEED: &[u8] = b"vault";
 // Program ID
 //----------------------------------------
 
-declare_id!("4s6BJkymabK7o275uaThj5zaPybLovbMdjtHAvyM6T92");
+declare_id!("5CdJurnC4uskc9fyUqPmsWZJcwc7XzyLrEWRanUtDYJT");
 
 //----------------------------------------
 // Program Module
@@ -67,6 +62,18 @@ pub mod relay_escrow {
             CustomError::Unauthorized
         );
         relay_escrow.allocator = new_allocator;
+        Ok(())
+    }
+
+    // Update owner
+    pub fn set_owner(ctx: Context<SetAllocator>, new_owner: Pubkey) -> Result<()> {
+        let relay_escrow = &mut ctx.accounts.relay_escrow;
+        require_keys_eq!(
+            ctx.accounts.owner.key(),
+            relay_escrow.owner,
+            CustomError::Unauthorized
+        );
+        relay_escrow.owner = new_owner;
         Ok(())
     }
 
@@ -129,7 +136,7 @@ pub mod relay_escrow {
         // Calculate transfer fee
         let mint = &ctx.accounts.mint;
         let transfer_fee = get_transfer_fee(mint, amount)?;
-        
+
         // Transfer to vault
         transfer_checked(
             CpiContext::new(
@@ -324,6 +331,17 @@ pub struct Initialize<'info> {
 
 #[derive(Accounts)]
 pub struct SetAllocator<'info> {
+    #[account(
+        mut,
+        seeds = [RELAY_ESCROW_SEED],
+        bump
+    )]
+    pub relay_escrow: Account<'info, RelayEscrow>,
+    pub owner: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct SetOwner<'info> {
     #[account(
         mut,
         seeds = [RELAY_ESCROW_SEED],
@@ -576,10 +594,7 @@ fn validate_ed25519_signature_instruction(
 /// Taken from:
 /// https://github.com/raydium-io/raydium-clmm/blob/eb7c392be9c8ef8af6eefb92ff834fc41ab975e3/programs/amm/src/util/token.rs#L218C1-L238C2
 /// Calculate the fee for input amount
-pub fn get_transfer_fee(
-    mint_account: &InterfaceAccount<Mint>,
-    pre_fee_amount: u64,
-) -> Result<u64> {
+pub fn get_transfer_fee(mint_account: &InterfaceAccount<Mint>, pre_fee_amount: u64) -> Result<u64> {
     let mint_info = mint_account.to_account_info();
     if *mint_info.owner == Token::id() {
         return Ok(0);

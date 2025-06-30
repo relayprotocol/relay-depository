@@ -37,7 +37,10 @@ describe("Relay Escrow", () => {
   // Test accounts
   const fakeOwner = Keypair.generate();
   const owner = Keypair.fromSecretKey(
-    Buffer.from('5223911e0fbfb0b8d5880ebea5711d5d7754387950c08b52c0eaf127facebd455e28ef570e8aed9ecef8a89f5c1a90739080c05df9e9c8ca082376ef93a02b2e', 'hex')
+    Buffer.from(
+      "5223911e0fbfb0b8d5880ebea5711d5d7754387950c08b52c0eaf127facebd455e28ef570e8aed9ecef8a89f5c1a90739080c05df9e9c8ca082376ef93a02b2e",
+      "hex"
+    )
   );
   const allocator = Keypair.generate();
   const user = Keypair.generate();
@@ -56,10 +59,6 @@ describe("Relay Escrow", () => {
   let vaultTokenAccount: PublicKey;
   let recipientTokenAccount: PublicKey;
   let wrongRecipientTokenAccount: PublicKey;
-
-  // Fee configuration
-  const feeBasisPoints = 100; // 1%
-  const maxFee = 5000; // Maximum fee amount
 
   // SPL Token 2022 test accounts
   let mint2022Keypair: Keypair;
@@ -120,7 +119,7 @@ describe("Relay Escrow", () => {
       9,
       mint2022Keypair,
       undefined,
-      TOKEN_2022_PROGRAM_ID,
+      TOKEN_2022_PROGRAM_ID
     );
 
     // Create token accounts
@@ -200,6 +199,31 @@ describe("Relay Escrow", () => {
     );
   });
 
+  const getEvents = async (signature: string) => {
+    await provider.connection.confirmTransaction(signature);
+
+    // Parse the deposit event to verify the recorded amount is correct (should be the amount after fee)
+    const depositTxTransaction = await provider.connection.getParsedTransaction(
+      signature,
+      "confirmed"
+    );
+
+    let events: anchor.Event[] = [];
+    for (const logMessage of depositTxTransaction?.meta?.logMessages || []) {
+      if (!logMessage.startsWith("Program data: ")) {
+        continue;
+      }
+      const event = program.coder.events.decode(
+        logMessage.slice("Program data: ".length)
+      );
+      if (event) {
+        events.push(event);
+      }
+    }
+
+    return events;
+  };
+
   it("Initialize with none-owner should fail", async () => {
     try {
       await program.methods
@@ -213,7 +237,7 @@ describe("Relay Escrow", () => {
         })
         .signers([fakeOwner])
         .rpc();
-        
+
       assert.fail("Should have thrown error");
     } catch (err) {
       assert.include(err.message, "Unauthorized");
@@ -221,30 +245,25 @@ describe("Relay Escrow", () => {
   });
 
   it("Should successfully initialize with correct owner", async () => {
-    try {
-      await program.methods
-        .initialize()
-        .accountsPartial({
-          relayEscrow: relayEscrowPDA,
-          vault: vaultPDA,
-          owner: owner.publicKey,
-          allocator: allocator.publicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([owner])
-        .rpc();
+    await program.methods
+      .initialize()
+      .accountsPartial({
+        relayEscrow: relayEscrowPDA,
+        vault: vaultPDA,
+        owner: owner.publicKey,
+        allocator: allocator.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([owner])
+      .rpc();
 
-      // Verify initialization
-      const relayEscrowAccount = await program.account.relayEscrow.fetch(
-        relayEscrowPDA
-      );
-      assert.ok(relayEscrowAccount.owner.equals(owner.publicKey));
-      assert.ok(relayEscrowAccount.allocator.equals(allocator.publicKey));
-      assert.equal(relayEscrowAccount.vaultBump, vaultBump);
-    } catch (error) {
-      console.error("Error during initialization:", error);
-      throw error;
-    }
+    // Verify initialization
+    const relayEscrowAccount = await program.account.relayEscrow.fetch(
+      relayEscrowPDA
+    );
+    assert.ok(relayEscrowAccount.owner.equals(owner.publicKey));
+    assert.ok(relayEscrowAccount.allocator.equals(allocator.publicKey));
+    assert.equal(relayEscrowAccount.vaultBump, vaultBump);
   });
 
   it("Owner can set new allocator", async () => {
@@ -321,7 +340,7 @@ describe("Relay Escrow", () => {
     );
     const vaultBalanceBefore = await provider.connection.getBalance(vaultPDA);
 
-    await program.methods
+    const depositTx = await program.methods
       .depositNative(new anchor.BN(depositAmount), id)
       .accountsPartial({
         relayEscrow: relayEscrowPDA,
@@ -348,82 +367,104 @@ describe("Relay Escrow", () => {
       depositAmount,
       "Incorrect SOL addition to vault"
     );
+
+    const events = await getEvents(depositTx);
+    const depositEvent = events.find((event) => event.name === "depositEvent");
+    assert.exists(depositEvent, "Deposit event should exist");
+
+    assert.equal(
+      depositEvent.data.depositor.toBase58(),
+      user.publicKey.toBase58()
+    );
+    assert.equal(depositEvent.data.token, null);
+    assert.equal(depositEvent.data.amount.toNumber(), depositAmount);
+    assert.equal(depositEvent.data.id.toString(), id.toString());
   });
 
   it("Deposit token", async () => {
     const depositAmount = LAMPORTS_PER_SOL;
     const id = Array.from(Buffer.alloc(32, 2));
 
+    // Get initial balances
+    const userBalanceBefore = await provider.connection.getTokenAccountBalance(
+      userTokenAccount
+    );
+
+    // Create vault token account if it doesn't exist
     try {
-      // Get initial balances
-      const userBalanceBefore =
-        await provider.connection.getTokenAccountBalance(userTokenAccount);
-
-      // Create vault token account if it doesn't exist
-      try {
-        await createAssociatedTokenAccount(
-          provider.connection,
-          owner, // payer
-          mintPubkey,
-          vaultPDA,
-          undefined,
-          undefined,
-          undefined,
-          true // allowOwnerOffCurve
-        );
-      } catch {
-        // Skip errors
-      }
-
-      // Deposit tokens
-      await program.methods
-        .depositToken(new anchor.BN(depositAmount), id)
-        .accountsPartial({
-          relayEscrow: relayEscrowPDA,
-          mint: mintPubkey,
-          sender: user.publicKey,
-          senderTokenAccount: userTokenAccount,
-          depositor: user.publicKey,
-          vaultTokenAccount: vaultTokenAccount,
-          vault: vaultPDA,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([user])
-        .rpc();
-
-      // Verify balances after deposit
-      const userBalanceAfter = await provider.connection.getTokenAccountBalance(
-        userTokenAccount
+      await createAssociatedTokenAccount(
+        provider.connection,
+        owner, // payer
+        mintPubkey,
+        vaultPDA,
+        undefined,
+        undefined,
+        undefined,
+        true // allowOwnerOffCurve
       );
-      const vaultBalanceAfter =
-        await provider.connection.getTokenAccountBalance(vaultTokenAccount);
-
-      assert.equal(
-        Number(userBalanceBefore.value.amount) -
-          Number(userBalanceAfter.value.amount),
-        depositAmount,
-        "Incorrect token deduction from user"
-      );
-
-      assert.equal(
-        Number(vaultBalanceAfter.value.amount),
-        depositAmount,
-        "Incorrect token deduction from vault"
-      );
-    } catch (error) {
-      console.error("Error during token deposit:", error);
-      throw error;
+    } catch {
+      // Skip errors
     }
+
+    // Deposit tokens
+    const depositTx = await program.methods
+      .depositToken(new anchor.BN(depositAmount), id)
+      .accountsPartial({
+        relayEscrow: relayEscrowPDA,
+        mint: mintPubkey,
+        sender: user.publicKey,
+        senderTokenAccount: userTokenAccount,
+        depositor: user.publicKey,
+        vaultTokenAccount: vaultTokenAccount,
+        vault: vaultPDA,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([user])
+      .rpc();
+
+    // Verify balances after deposit
+    const userBalanceAfter = await provider.connection.getTokenAccountBalance(
+      userTokenAccount
+    );
+    const vaultBalanceAfter = await provider.connection.getTokenAccountBalance(
+      vaultTokenAccount
+    );
+
+    assert.equal(
+      Number(userBalanceBefore.value.amount) -
+        Number(userBalanceAfter.value.amount),
+      depositAmount,
+      "Incorrect token deduction from user"
+    );
+
+    assert.equal(
+      Number(vaultBalanceAfter.value.amount),
+      depositAmount,
+      "Incorrect token deduction from vault"
+    );
+
+    const events = await getEvents(depositTx);
+    const depositEvent = events.find((event) => event.name === "depositEvent");
+    assert.exists(depositEvent, "Deposit event should exist");
+
+    assert.equal(
+      depositEvent.data.depositor.toBase58(),
+      user.publicKey.toBase58()
+    );
+    assert.equal(depositEvent.data.token.toBase58(), mintPubkey.toBase58());
+    assert.equal(depositEvent.data.amount.toNumber(), depositAmount);
+    assert.equal(depositEvent.data.id.toString(), id.toString());
   });
 
   it("Deposit token2022", async () => {
     const depositAmount = LAMPORTS_PER_SOL;
     const id = Array.from(Buffer.alloc(32, 3));
 
-    const userBalanceBefore =
-      await provider.connection.getTokenAccountBalance(user2022TokenAccount);
+    const userBalanceBefore = await provider.connection.getTokenAccountBalance(
+      user2022TokenAccount
+    );
 
     // Create vault token account if it doesn't exist
     try {
@@ -433,12 +474,11 @@ describe("Relay Escrow", () => {
         mint2022Pubkey,
         vaultPDA,
         undefined,
-        TOKEN_2022_PROGRAM_ID 
+        TOKEN_2022_PROGRAM_ID
       );
-    } catch {
-    }
+    } catch {}
 
-    await program.methods
+    const depositTx = await program.methods
       .depositToken(new anchor.BN(depositAmount), id)
       .accountsPartial({
         relayEscrow: relayEscrowPDA,
@@ -458,12 +498,13 @@ describe("Relay Escrow", () => {
     const userBalanceAfter = await provider.connection.getTokenAccountBalance(
       user2022TokenAccount
     );
-    const vaultBalanceAfter =
-      await provider.connection.getTokenAccountBalance(vault2022TokenAccount);
+    const vaultBalanceAfter = await provider.connection.getTokenAccountBalance(
+      vault2022TokenAccount
+    );
 
     assert.equal(
       Number(userBalanceBefore.value.amount) -
-      Number(userBalanceAfter.value.amount),
+        Number(userBalanceAfter.value.amount),
       depositAmount,
       "Incorrect token deduction from user"
     );
@@ -473,14 +514,26 @@ describe("Relay Escrow", () => {
       depositAmount,
       "Incorrect token addition to vault"
     );
+
+    const events = await getEvents(depositTx);
+    const depositEvent = events.find((event) => event.name === "depositEvent");
+    assert.exists(depositEvent, "Deposit event should exist");
+
+    assert.equal(
+      depositEvent.data.depositor.toBase58(),
+      user.publicKey.toBase58()
+    );
+    assert.equal(depositEvent.data.token.toBase58(), mint2022Pubkey.toBase58());
+    assert.equal(depositEvent.data.amount.toNumber(), depositAmount);
+    assert.equal(depositEvent.data.id.toString(), id.toString());
   });
 
   it("Deposit token2022 with transfer fee - verify amount excludes fee", async () => {
     // Create a Token2022 mint with transfer fee
     const mintWithFeeKeypair = Keypair.generate();
     const transferFeeBasisPoints = 100; // 1% transfer fee
-    const maxFee = 5000 * 10**9; // Maximum fee of 5000 tokens
-    
+    const maxFee = 5000 * 10 ** 9; // Maximum fee of 5000 tokens
+
     // Use the provided function to create a token with transfer fee
     const mintWithFeePubkey = await createMintWithTransferFee(
       provider.connection,
@@ -489,7 +542,7 @@ describe("Relay Escrow", () => {
       mintWithFeeKeypair,
       { transferFeeBasisPoints, MaxFee: maxFee }
     );
-    
+
     // Create token account for the user
     const userFeeTokenAccount = await createAssociatedTokenAccount(
       provider.connection,
@@ -499,7 +552,7 @@ describe("Relay Escrow", () => {
       undefined,
       TOKEN_2022_PROGRAM_ID
     );
-    
+
     // Get the vault's token account address
     const vaultFeeTokenAccount = await getAssociatedTokenAddress(
       mintWithFeePubkey,
@@ -507,7 +560,7 @@ describe("Relay Escrow", () => {
       true, // allowOwnerOffCurve - needed for PDA
       TOKEN_2022_PROGRAM_ID
     );
-    
+
     // Mint tokens to the user
     const mintAmount = 100 * LAMPORTS_PER_SOL; // 100 tokens
     await mintTo(
@@ -521,21 +574,23 @@ describe("Relay Escrow", () => {
       undefined,
       TOKEN_2022_PROGRAM_ID
     );
-    
+
     // Check user's balance before deposit
     const userBalanceBefore = await provider.connection.getTokenAccountBalance(
-      userFeeTokenAccount,
+      userFeeTokenAccount
     );
-    
+
     // Generate a unique ID for this deposit
     const id = Array.from(Buffer.alloc(32, 4));
-    
+
     // Amount to deposit
     const depositAmount = 10 * LAMPORTS_PER_SOL; // 10 tokens
-    
+
     // Calculate the expected transfer fee
-    const expectedFee = Math.floor(depositAmount * transferFeeBasisPoints / 10000);
-    
+    const expectedFee = Math.floor(
+      (depositAmount * transferFeeBasisPoints) / 10000
+    );
+
     // Create vault token account if it doesn't exist
     try {
       await createAssociatedTokenAccount(
@@ -567,52 +622,35 @@ describe("Relay Escrow", () => {
       })
       .signers([user])
       .rpc();
-      
+
     // Get user's balance after the deposit
     const userBalanceAfter = await provider.connection.getTokenAccountBalance(
-      userFeeTokenAccount,
+      userFeeTokenAccount
     );
-    
+
     // Get vault's balance
     const vaultBalanceAfter = await provider.connection.getTokenAccountBalance(
-      vaultFeeTokenAccount,
+      vaultFeeTokenAccount
     );
 
     // Verify the user's account was debited the full deposit amount
-    const userBalanceDecrease = 
-      Number(userBalanceBefore.value.amount) - Number(userBalanceAfter.value.amount);
+    const userBalanceDecrease =
+      Number(userBalanceBefore.value.amount) -
+      Number(userBalanceAfter.value.amount);
     assert.equal(
       userBalanceDecrease,
       depositAmount,
       "User's balance should decrease by the full deposit amount"
     );
-    
+
     // Verify the vault received the deposit amount minus the fee
     assert.equal(
       Number(vaultBalanceAfter.value.amount),
       depositAmount - expectedFee,
       "Vault should receive deposit amount minus transfer fee"
     );
-    
-    // Parse the deposit event to verify the recorded amount is correct (should be the amount after fee)
-    const depositTxTransaction = await provider.connection.getParsedTransaction(
-      depositTx,
-      { commitment: "confirmed" }
-    );
-    
-    let events = [];
-    for (const logMessage of depositTxTransaction?.meta?.logMessages || []) {
-      if (!logMessage.startsWith("Program data: ")) {
-        continue;
-      }
-      const event = program.coder.events.decode(
-        logMessage.slice("Program data: ".length)
-      );
-      if (event) {
-        events.push(event);
-      }
-    }
-    
+
+    const events = await getEvents(depositTx);
     const depositEvent = events.find((event) => event.name === "depositEvent");
     assert.exists(depositEvent, "Deposit event should exist");
 
@@ -622,7 +660,7 @@ describe("Relay Escrow", () => {
       depositAmount - expectedFee,
       "Deposit event amount should record the amount after fee deduction"
     );
-    
+
     // Verify other event data
     assert.equal(
       depositEvent.data.depositor.toBase58(),
@@ -740,7 +778,9 @@ describe("Relay Escrow", () => {
           }),
         ])
         .rpc();
-        assert.fail("Expected transaction to fail with InsufficientVaultBalance error");
+      assert.fail(
+        "Expected transaction to fail with InsufficientVaultBalance error"
+      );
     } catch (err) {
       assert.include(err.message, "InsufficientVaultBalance");
     }
@@ -932,7 +972,9 @@ describe("Relay Escrow", () => {
     const requestPDA = await getUsedRequestPDA(request);
 
     const recipientBalanceBefore =
-      await provider.connection.getTokenAccountBalance(recipient2022TokenAccount);
+      await provider.connection.getTokenAccountBalance(
+        recipient2022TokenAccount
+      );
     const vaultBalanceBefore = await provider.connection.getTokenAccountBalance(
       vault2022TokenAccount
     );
@@ -963,21 +1005,23 @@ describe("Relay Escrow", () => {
       .rpc();
 
     const recipientBalanceAfter =
-      await provider.connection.getTokenAccountBalance(recipient2022TokenAccount);
+      await provider.connection.getTokenAccountBalance(
+        recipient2022TokenAccount
+      );
     const vaultBalanceAfter = await provider.connection.getTokenAccountBalance(
       vault2022TokenAccount
     );
 
     assert.equal(
       Number(recipientBalanceAfter.value.amount) -
-      Number(recipientBalanceBefore.value.amount),
+        Number(recipientBalanceBefore.value.amount),
       transferAmount,
       "Incorrect token transfer to recipient"
     );
 
     assert.equal(
       Number(vaultBalanceBefore.value.amount) -
-      Number(vaultBalanceAfter.value.amount),
+        Number(vaultBalanceAfter.value.amount),
       transferAmount,
       "Incorrect token deduction from vault"
     );
@@ -1133,30 +1177,31 @@ describe("Relay Escrow", () => {
         .executeTransfer(request)
         .accountsPartial({
           mint: null,
-        vaultTokenAccount: null,
-        recipientTokenAccount: null,
-        relayEscrow: relayEscrowPDA,
-        executor: provider.wallet.publicKey,
-        recipient: wrongRecipient.publicKey,
-        vault: vaultPDA,
-        usedRequest: requestPDA,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-        ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
-      })
-      .preInstructions([
-        anchor.web3.Ed25519Program.createInstructionWithPublicKey({
-          publicKey: allocator.publicKey.toBytes(),
-          message: messagHash,
-          signature: signature,
-        }),
-      ]).rpc();
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayEscrow: relayEscrowPDA,
+          executor: provider.wallet.publicKey,
+          recipient: wrongRecipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([
+          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+            publicKey: allocator.publicKey.toBytes(),
+            message: messagHash,
+            signature: signature,
+          }),
+        ])
+        .rpc();
 
       assert.fail("Should have failed with invalid recipient");
     } catch (err) {
       assert.include(err.message, "InvalidRecipient");
-  
+
       // Verify request was not marked as used
       try {
         await program.account.usedRequest.fetch(requestPDA);
@@ -1169,7 +1214,7 @@ describe("Relay Escrow", () => {
 
   it("Should fail execute token transfer with mismatched recipient", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 10;
-  
+
     // Create transfer request with recipient A
     const request = {
       recipient: recipient.publicKey, // Use original recipient in request
@@ -1178,42 +1223,42 @@ describe("Relay Escrow", () => {
       nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
       expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
     };
-  
+
     const messagHash = hashRequest(request);
     const signature = nacl.sign.detached(messagHash, allocator.secretKey);
     const requestPDA = await getUsedRequestPDA(request);
-  
+
     try {
       // But try to execute with recipient B
       await program.methods
-      .executeTransfer(request)
-      .accountsPartial({
-        mint: mintPubkey,
-        vaultTokenAccount,
-        recipientTokenAccount: wrongRecipientTokenAccount,
-        relayEscrow: relayEscrowPDA,
-        executor: provider.wallet.publicKey,
-        recipient: wrongRecipient.publicKey,
-        vault: vaultPDA,
-        usedRequest: requestPDA,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-        ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
-      })
-      .preInstructions([
-        anchor.web3.Ed25519Program.createInstructionWithPublicKey({
-          publicKey: allocator.publicKey.toBytes(),
-          message: messagHash,
-          signature: signature,
-        }),
-      ])
-      .rpc();
-  
+        .executeTransfer(request)
+        .accountsPartial({
+          mint: mintPubkey,
+          vaultTokenAccount,
+          recipientTokenAccount: wrongRecipientTokenAccount,
+          relayEscrow: relayEscrowPDA,
+          executor: provider.wallet.publicKey,
+          recipient: wrongRecipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([
+          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+            publicKey: allocator.publicKey.toBytes(),
+            message: messagHash,
+            signature: signature,
+          }),
+        ])
+        .rpc();
+
       assert.fail("Should have failed with invalid recipient");
     } catch (err) {
       assert.include(err.message, "InvalidRecipient");
-  
+
       // Verify request was not marked as used
       try {
         await program.account.usedRequest.fetch(requestPDA);
@@ -1520,7 +1565,6 @@ describe("Relay Escrow", () => {
     return pda;
   };
 });
-
 
 async function createMintWithTransferFee(
   connection: anchor.web3.Connection,

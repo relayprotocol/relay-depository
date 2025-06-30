@@ -8,12 +8,14 @@ use relay_escrow::program::RelayEscrow;
 //----------------------------------------
 // Constants
 //----------------------------------------
+
 const FORWARDER_SEED: &[u8] = b"forwarder";
 
 //----------------------------------------
 // Program ID
 //----------------------------------------
-declare_id!("EbWguaxgPD4DFqUwPKRohRkh1LQhNvAKxbvEXFrSx9bc");
+
+declare_id!("Brjhojay2oUjBrrqmE2GmUKEutbeDzDztQQsB9T3FsUj");
 
 //----------------------------------------
 // Program Module
@@ -25,17 +27,13 @@ pub mod relay_forwarder {
 
     /// Forwards native tokens from the forwarder account to the relay escrow vault account
     pub fn forward_native(ctx: Context<ForwardNative>, id: [u8; 32]) -> Result<()> {
-        let total_amount = ctx.accounts.forwarder.lamports();
+        let amount = ctx.accounts.forwarder.lamports();
+
         let rent = Rent::get()?;
         let min_rent = rent.minimum_balance(0);
 
         // Check that the forwarder has more than the minimum required amount
-        require!(total_amount > min_rent, ForwarderError::InsufficientBalance);
-
-        // Only forward the amount above rent-exempt threshold
-        let amount = total_amount - min_rent;
-
-        let seeds: &[&[&[u8]]] = &[&[FORWARDER_SEED, &[ctx.bumps.forwarder]]];
+        require!(amount > min_rent, ForwarderError::InsufficientBalance);
 
         let seeds: &[&[&[u8]]] = &[&[FORWARDER_SEED, &[ctx.bumps.forwarder]]];
 
@@ -45,7 +43,8 @@ pub mod relay_forwarder {
                 ctx.accounts.into_deposit_accounts(),
                 seeds,
             ),
-            amount,
+            // Only forward the amount above rent-exempt threshold
+            amount - min_rent,
             id,
         )?;
 
@@ -53,15 +52,9 @@ pub mod relay_forwarder {
     }
 
     /// Forwards spl tokens from the forwarder token account to the relay escrow vault token account
-    pub fn forward_token(
-        ctx: Context<ForwardToken>,
-        id: [u8; 32]
-    ) -> Result<()> {
+    pub fn forward_token(ctx: Context<ForwardToken>, id: [u8; 32]) -> Result<()> {
         let amount = ctx.accounts.forwarder_token_account.amount;
-        require!(
-            amount > 0,
-            ForwarderError::InsufficientBalance
-        );
+        require!(amount > 0, ForwarderError::InsufficientBalance);
 
         let seeds: &[&[&[u8]]] = &[&[FORWARDER_SEED, &[ctx.bumps.forwarder]]];
 
@@ -89,7 +82,6 @@ pub mod relay_forwarder {
         Ok(())
     }
 }
-
 
 //----------------------------------------
 // Instruction Contexts
@@ -154,8 +146,8 @@ pub struct ForwardToken<'info> {
     /// CHECK: Used as public key only
     pub depositor: UncheckedAccount<'info>,
 
-     /// CHECK: Forwarder PDA that will act as the intermediary
-     #[account(
+    /// CHECK: Forwarder PDA that will act as the intermediary
+    #[account(
         mut,
         seeds = [FORWARDER_SEED],
         bump
