@@ -337,10 +337,10 @@
     "name": "mantle",
     "chainId": 5000,
     "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
+    "evmVersion": "london",
     "explorerUrl": "https://explorer.mantle.xyz",
     "verificationFlags": "--chain 5000 --verifier blockscout --verifier-url https://explorer.mantle.xyz/api",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
