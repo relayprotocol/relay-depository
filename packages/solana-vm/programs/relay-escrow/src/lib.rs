@@ -297,7 +297,11 @@ pub struct Initialize<'info> {
 
 #[derive(Accounts)]
 pub struct SetAllocator<'info> {
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [RELAY_ESCROW_SEED],
+        bump
+    )]
     pub relay_escrow: Account<'info, RelayEscrow>,
     pub owner: Signer<'info>,
 }
@@ -370,6 +374,10 @@ pub struct DepositToken<'info> {
 #[derive(Accounts)]
 #[instruction(request: TransferRequest)]
 pub struct ExecuteTransfer<'info> {
+    #[account(
+        seeds = [RELAY_ESCROW_SEED],
+        bump
+    )]
     pub relay_escrow: Account<'info, RelayEscrow>,
 
     #[account(mut)]
