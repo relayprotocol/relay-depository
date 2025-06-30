@@ -249,6 +249,7 @@ pub mod relay_escrow {
 //----------------------------------------
 
 #[account]
+#[derive(InitSpace)]
 pub struct RelayEscrow {
     pub owner: Pubkey,
     pub allocator: Pubkey,
@@ -256,6 +257,7 @@ pub struct RelayEscrow {
 }
 
 #[account]
+#[derive(InitSpace)]
 pub struct UsedRequest {
     pub is_used: bool,
 }
@@ -269,7 +271,7 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = owner,
-        space = 8 + 32 + 32 + 1, // discriminator(8) + owner(32) + allocator(32) + vault_bump(1)
+        space = 8 + RelayEscrow::INIT_SPACE,
         seeds = [RELAY_ESCROW_SEED],
         constraint = owner.key() == AUTHORIZED_PUBKEY @ CustomError::Unauthorized,
         bump
@@ -406,7 +408,7 @@ pub struct ExecuteTransfer<'info> {
     #[account(
         init,
         payer = executor,
-        space = 8 + 1,
+        space = 8 + UsedRequest::INIT_SPACE,
         seeds = [
             USED_REQUEST_SEED,
             &request.get_hash().to_bytes()[..],
