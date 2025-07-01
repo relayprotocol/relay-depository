@@ -34,7 +34,7 @@ const VAULT_SEED: &[u8] = b"vault";
 // Program ID
 //----------------------------------------
 
-declare_id!("5CdJurnC4uskc9fyUqPmsWZJcwc7XzyLrEWRanUtDYJT");
+declare_id!("99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2");
 
 //----------------------------------------
 // Program Module

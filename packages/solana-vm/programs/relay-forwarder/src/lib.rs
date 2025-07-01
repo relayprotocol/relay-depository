@@ -9,13 +9,13 @@ use relay_depository::program::RelayDepository;
 // Constants
 //----------------------------------------
 
-const FORWARDER_SEED: &[u8] = b"forwarder";
+const RELAY_FORWARDER_SEED: &[u8] = b"relay_forwarder";
 
 //----------------------------------------
 // Program ID
 //----------------------------------------
 
-declare_id!("Brjhojay2oUjBrrqmE2GmUKEutbeDzDztQQsB9T3FsUj");
+declare_id!("DPArtTLbEqa6EuXHfL5UFLBZhFjiEXWRudhvXDrjwXUr");
 
 //----------------------------------------
 // Program Module
@@ -35,7 +35,7 @@ pub mod relay_forwarder {
         // Check that the forwarder has more than the minimum required amount
         require!(amount > min_rent, ForwarderError::InsufficientBalance);
 
-        let seeds: &[&[&[u8]]] = &[&[FORWARDER_SEED, &[ctx.bumps.forwarder]]];
+        let seeds: &[&[&[u8]]] = &[&[RELAY_FORWARDER_SEED, &[ctx.bumps.forwarder]]];
 
         relay_depository::cpi::deposit_native(
             CpiContext::new_with_signer(
@@ -56,7 +56,7 @@ pub mod relay_forwarder {
         let amount = ctx.accounts.forwarder_token_account.amount;
         require!(amount > 0, ForwarderError::InsufficientBalance);
 
-        let seeds: &[&[&[u8]]] = &[&[FORWARDER_SEED, &[ctx.bumps.forwarder]]];
+        let seeds: &[&[&[u8]]] = &[&[RELAY_FORWARDER_SEED, &[ctx.bumps.forwarder]]];
 
         relay_depository::cpi::deposit_token(
             CpiContext::new_with_signer(
@@ -103,7 +103,7 @@ pub struct ForwardNative<'info> {
     /// CHECK: Forwarder PDA that will act as the intermediary
     #[account(
         mut,
-        seeds = [FORWARDER_SEED],
+        seeds = [RELAY_FORWARDER_SEED],
         bump
     )]
     pub forwarder: UncheckedAccount<'info>,
@@ -149,7 +149,7 @@ pub struct ForwardToken<'info> {
     /// CHECK: Forwarder PDA that will act as the intermediary
     #[account(
         mut,
-        seeds = [FORWARDER_SEED],
+        seeds = [RELAY_FORWARDER_SEED],
         bump
     )]
     pub forwarder: UncheckedAccount<'info>,
