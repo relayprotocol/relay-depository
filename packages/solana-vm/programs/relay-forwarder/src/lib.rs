@@ -3,7 +3,7 @@ use anchor_spl::{
     associated_token::AssociatedToken,
     token_interface::{close_account, CloseAccount, Mint, TokenAccount, TokenInterface},
 };
-use relay_escrow::program::RelayEscrow;
+use relay_depository::program::RelayDepository;
 
 //----------------------------------------
 // Constants
@@ -25,7 +25,7 @@ declare_id!("Brjhojay2oUjBrrqmE2GmUKEutbeDzDztQQsB9T3FsUj");
 pub mod relay_forwarder {
     use super::*;
 
-    /// Forwards native tokens from the forwarder account to the relay escrow vault account
+    /// Forwards native tokens from the forwarder account to the relay depository vault account
     pub fn forward_native(ctx: Context<ForwardNative>, id: [u8; 32]) -> Result<()> {
         let amount = ctx.accounts.forwarder.lamports();
 
@@ -37,9 +37,9 @@ pub mod relay_forwarder {
 
         let seeds: &[&[&[u8]]] = &[&[FORWARDER_SEED, &[ctx.bumps.forwarder]]];
 
-        relay_escrow::cpi::deposit_native(
+        relay_depository::cpi::deposit_native(
             CpiContext::new_with_signer(
-                ctx.accounts.relay_escrow_program.to_account_info(),
+                ctx.accounts.relay_depository_program.to_account_info(),
                 ctx.accounts.into_deposit_accounts(),
                 seeds,
             ),
@@ -51,16 +51,16 @@ pub mod relay_forwarder {
         Ok(())
     }
 
-    /// Forwards spl tokens from the forwarder token account to the relay escrow vault token account
+    /// Forwards spl tokens from the forwarder token account to the relay depository vault token account
     pub fn forward_token(ctx: Context<ForwardToken>, id: [u8; 32]) -> Result<()> {
         let amount = ctx.accounts.forwarder_token_account.amount;
         require!(amount > 0, ForwarderError::InsufficientBalance);
 
         let seeds: &[&[&[u8]]] = &[&[FORWARDER_SEED, &[ctx.bumps.forwarder]]];
 
-        relay_escrow::cpi::deposit_token(
+        relay_depository::cpi::deposit_token(
             CpiContext::new_with_signer(
-                ctx.accounts.relay_escrow_program.to_account_info(),
+                ctx.accounts.relay_depository_program.to_account_info(),
                 ctx.accounts.into_deposit_accounts(),
                 seeds,
             ),
@@ -108,23 +108,23 @@ pub struct ForwardNative<'info> {
     )]
     pub forwarder: UncheckedAccount<'info>,
 
-    /// CHECK: Relay escrow program account
-    pub relay_escrow: UncheckedAccount<'info>,
+    /// CHECK: Relay depository program account
+    pub relay_depository: UncheckedAccount<'info>,
 
-    /// CHECK: Relay escrow vault
+    /// CHECK: Relay depository vault
     #[account(mut)]
     pub relay_vault: UncheckedAccount<'info>,
 
-    pub relay_escrow_program: Program<'info, relay_escrow::program::RelayEscrow>,
+    pub relay_depository_program: Program<'info, relay_depository::program::RelayDepository>,
     pub system_program: Program<'info, System>,
 }
 
 impl<'info> ForwardNative<'info> {
-    /// Converts `ForwardNative` accounts into `relay_escrow::cpi::accounts::DepositNative`
-    /// accounts for use in cross-program-invocation calls to the `relay_escrow` program
-    fn into_deposit_accounts(&self) -> relay_escrow::cpi::accounts::DepositNative<'info> {
-        relay_escrow::cpi::accounts::DepositNative {
-            relay_escrow: self.relay_escrow.to_account_info(),
+    /// Converts `ForwardNative` accounts into `relay_depository::cpi::accounts::DepositNative`
+    /// accounts for use in cross-program-invocation calls to the `relay_depository` program
+    fn into_deposit_accounts(&self) -> relay_depository::cpi::accounts::DepositNative<'info> {
+        relay_depository::cpi::accounts::DepositNative {
+            relay_depository: self.relay_depository.to_account_info(),
             depositor: self.depositor.to_account_info(),
             sender: self.forwarder.to_account_info(),
             vault: self.relay_vault.to_account_info(),
@@ -154,10 +154,10 @@ pub struct ForwardToken<'info> {
     )]
     pub forwarder: UncheckedAccount<'info>,
 
-    /// CHECK: Relay escrow program account
-    pub relay_escrow: UncheckedAccount<'info>,
+    /// CHECK: Relay depository program account
+    pub relay_depository: UncheckedAccount<'info>,
 
-    /// CHECK: Relay escrow vault
+    /// CHECK: Relay depository vault
     pub relay_vault: UncheckedAccount<'info>,
 
     /// CHECK: Token mint account
@@ -172,22 +172,22 @@ pub struct ForwardToken<'info> {
     )]
     pub forwarder_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    /// CHECK: Relay escrow vault token account
+    /// CHECK: Relay depository vault token account
     #[account(mut)]
     pub relay_vault_token_account: UncheckedAccount<'info>,
 
-    pub relay_escrow_program: Program<'info, relay_escrow::program::RelayEscrow>,
+    pub relay_depository_program: Program<'info, relay_depository::program::RelayDepository>,
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
 impl<'info> ForwardToken<'info> {
-    /// Converts `ForwardToken` accounts into `relay_escrow::cpi::accounts::DepositToken`
-    /// accounts for use in cross-program-invocation calls to the `relay_escrow`` program
-    fn into_deposit_accounts(&self) -> relay_escrow::cpi::accounts::DepositToken<'info> {
-        relay_escrow::cpi::accounts::DepositToken {
-            relay_escrow: self.relay_escrow.to_account_info(),
+    /// Converts `ForwardToken` accounts into `relay_depository::cpi::accounts::DepositToken`
+    /// accounts for use in cross-program-invocation calls to the `relay_depository`` program
+    fn into_deposit_accounts(&self) -> relay_depository::cpi::accounts::DepositToken<'info> {
+        relay_depository::cpi::accounts::DepositToken {
+            relay_depository: self.relay_depository.to_account_info(),
             depositor: self.depositor.to_account_info(),
             sender: self.forwarder.to_account_info(),
             mint: self.mint.to_account_info(),

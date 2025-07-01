@@ -24,7 +24,7 @@ use anchor_spl::{
 
 const AUTHORIZED_PUBKEY: Pubkey = pubkey!("7LZXYdDQcRTsXnL9EU2zGkninV3yJsqX43m4RMPbs68u");
 
-const RELAY_ESCROW_SEED: &[u8] = b"relay_escrow";
+const RELAY_DEPOSITORY_SEED: &[u8] = b"relay_depository";
 
 const USED_REQUEST_SEED: &[u8] = b"used_request";
 
@@ -41,39 +41,39 @@ declare_id!("5CdJurnC4uskc9fyUqPmsWZJcwc7XzyLrEWRanUtDYJT");
 //----------------------------------------
 
 #[program]
-pub mod relay_escrow {
+pub mod relay_depository {
     use super::*;
 
     // Initialize program with owner and allocator
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        let relay_escrow = &mut ctx.accounts.relay_escrow;
-        relay_escrow.owner = ctx.accounts.owner.key();
-        relay_escrow.allocator = ctx.accounts.allocator.key();
-        relay_escrow.vault_bump = ctx.bumps.vault;
+        let relay_depository = &mut ctx.accounts.relay_depository;
+        relay_depository.owner = ctx.accounts.owner.key();
+        relay_depository.allocator = ctx.accounts.allocator.key();
+        relay_depository.vault_bump = ctx.bumps.vault;
         Ok(())
     }
 
     // Update allocator
     pub fn set_allocator(ctx: Context<SetAllocator>, new_allocator: Pubkey) -> Result<()> {
-        let relay_escrow = &mut ctx.accounts.relay_escrow;
+        let relay_depository = &mut ctx.accounts.relay_depository;
         require_keys_eq!(
             ctx.accounts.owner.key(),
-            relay_escrow.owner,
+            relay_depository.owner,
             CustomError::Unauthorized
         );
-        relay_escrow.allocator = new_allocator;
+        relay_depository.allocator = new_allocator;
         Ok(())
     }
 
     // Update owner
     pub fn set_owner(ctx: Context<SetAllocator>, new_owner: Pubkey) -> Result<()> {
-        let relay_escrow = &mut ctx.accounts.relay_escrow;
+        let relay_depository = &mut ctx.accounts.relay_depository;
         require_keys_eq!(
             ctx.accounts.owner.key(),
-            relay_escrow.owner,
+            relay_depository.owner,
             CustomError::Unauthorized
         );
-        relay_escrow.owner = new_owner;
+        relay_depository.owner = new_owner;
         Ok(())
     }
 
@@ -164,9 +164,9 @@ pub mod relay_escrow {
 
     // Execute transfer with allocator signature
     pub fn execute_transfer(ctx: Context<ExecuteTransfer>, request: TransferRequest) -> Result<()> {
-        let relay_escrow = &ctx.accounts.relay_escrow;
+        let relay_depository = &ctx.accounts.relay_depository;
         let used_request = &mut ctx.accounts.used_request;
-        let vault_bump = relay_escrow.vault_bump;
+        let vault_bump = relay_depository.vault_bump;
 
         require!(
             !used_request.is_used,
@@ -190,7 +190,11 @@ pub mod relay_escrow {
             &ctx.accounts.ix_sysvar,
         )?;
 
-        validate_ed25519_signature_instruction(&signature_ix, &relay_escrow.allocator, &request)?;
+        validate_ed25519_signature_instruction(
+            &signature_ix,
+            &relay_depository.allocator,
+            &request,
+        )?;
 
         used_request.is_used = true;
 
@@ -284,7 +288,7 @@ pub mod relay_escrow {
 
 #[account]
 #[derive(InitSpace)]
-pub struct RelayEscrow {
+pub struct RelayDepository {
     pub owner: Pubkey,
     pub allocator: Pubkey,
     pub vault_bump: u8,
@@ -305,12 +309,12 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = owner,
-        space = 8 + RelayEscrow::INIT_SPACE,
-        seeds = [RELAY_ESCROW_SEED],
+        space = 8 + RelayDepository::INIT_SPACE,
+        seeds = [RELAY_DEPOSITORY_SEED],
         constraint = owner.key() == AUTHORIZED_PUBKEY @ CustomError::Unauthorized,
         bump
     )]
-    pub relay_escrow: Account<'info, RelayEscrow>,
+    pub relay_depository: Account<'info, RelayDepository>,
 
     /// CHECK: PDA that will hold SOL
     #[account(
@@ -333,10 +337,10 @@ pub struct Initialize<'info> {
 pub struct SetAllocator<'info> {
     #[account(
         mut,
-        seeds = [RELAY_ESCROW_SEED],
+        seeds = [RELAY_DEPOSITORY_SEED],
         bump
     )]
-    pub relay_escrow: Account<'info, RelayEscrow>,
+    pub relay_depository: Account<'info, RelayDepository>,
     pub owner: Signer<'info>,
 }
 
@@ -344,20 +348,20 @@ pub struct SetAllocator<'info> {
 pub struct SetOwner<'info> {
     #[account(
         mut,
-        seeds = [RELAY_ESCROW_SEED],
+        seeds = [RELAY_DEPOSITORY_SEED],
         bump
     )]
-    pub relay_escrow: Account<'info, RelayEscrow>,
+    pub relay_depository: Account<'info, RelayDepository>,
     pub owner: Signer<'info>,
 }
 
 #[derive(Accounts)]
 pub struct DepositNative<'info> {
     #[account(
-        seeds = [RELAY_ESCROW_SEED],
+        seeds = [RELAY_DEPOSITORY_SEED],
         bump
     )]
-    pub relay_escrow: Account<'info, RelayEscrow>,
+    pub relay_depository: Account<'info, RelayDepository>,
 
     #[account(mut)]
     pub sender: Signer<'info>,
@@ -369,7 +373,7 @@ pub struct DepositNative<'info> {
     #[account(
         mut,
         seeds = [VAULT_SEED],
-        bump = relay_escrow.vault_bump
+        bump = relay_depository.vault_bump
     )]
     pub vault: UncheckedAccount<'info>,
 
@@ -379,10 +383,10 @@ pub struct DepositNative<'info> {
 #[derive(Accounts)]
 pub struct DepositToken<'info> {
     #[account(
-        seeds = [RELAY_ESCROW_SEED],
+        seeds = [RELAY_DEPOSITORY_SEED],
         bump
     )]
-    pub relay_escrow: Account<'info, RelayEscrow>,
+    pub relay_depository: Account<'info, RelayDepository>,
 
     #[account(mut)]
     pub sender: Signer<'info>,
@@ -393,7 +397,7 @@ pub struct DepositToken<'info> {
     /// CHECK: PDA that will hold tokens
     #[account(
         seeds = [VAULT_SEED],
-        bump = relay_escrow.vault_bump
+        bump = relay_depository.vault_bump
     )]
     pub vault: UncheckedAccount<'info>,
 
@@ -420,10 +424,10 @@ pub struct DepositToken<'info> {
 #[instruction(request: TransferRequest)]
 pub struct ExecuteTransfer<'info> {
     #[account(
-        seeds = [RELAY_ESCROW_SEED],
+        seeds = [RELAY_DEPOSITORY_SEED],
         bump
     )]
-    pub relay_escrow: Account<'info, RelayEscrow>,
+    pub relay_depository: Account<'info, RelayDepository>,
 
     #[account(mut)]
     pub executor: Signer<'info>,
@@ -436,7 +440,7 @@ pub struct ExecuteTransfer<'info> {
     #[account(
         mut,
         seeds = [VAULT_SEED],
-        bump = relay_escrow.vault_bump
+        bump = relay_depository.vault_bump
     )]
     pub vault: UncheckedAccount<'info>,
 

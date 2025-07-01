@@ -16,7 +16,7 @@ import {
 import { assert } from "chai";
 
 import { RelayForwarder } from "../target/types/relay_forwarder";
-import { RelayEscrow } from "../target/types/relay_escrow";
+import { RelayDepository } from "../target/types/relay_depository";
 
 describe("Relay Forwarder", () => {
   // Configure the client to use the local cluster
@@ -25,7 +25,8 @@ describe("Relay Forwarder", () => {
 
   const forwarderProgram = anchor.workspace
     .RelayForwarder as Program<RelayForwarder>;
-  const escrowProgram = anchor.workspace.RelayEscrow as Program<RelayEscrow>;
+  const depositoryProgram = anchor.workspace
+    .RelayDepository as Program<RelayDepository>;
 
   const sender = provider.wallet as anchor.Wallet;
 
@@ -33,7 +34,7 @@ describe("Relay Forwarder", () => {
   const depositor = anchor.web3.Keypair.generate();
 
   // PDAs
-  let relayEscrow: anchor.web3.PublicKey;
+  let relayDepository: anchor.web3.PublicKey;
   let vault: anchor.web3.PublicKey;
 
   // Test token related
@@ -56,15 +57,15 @@ describe("Relay Forwarder", () => {
       signatures.map((sig) => provider.connection.confirmTransaction(sig))
     );
 
-    // Get PDAs for relay-escrow
-    [relayEscrow] = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("relay_escrow")],
-      escrowProgram.programId
+    // Get PDAs for relay-depository
+    [relayDepository] = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("relay_depository")],
+      depositoryProgram.programId
     );
 
     [vault] = anchor.web3.PublicKey.findProgramAddressSync(
       [Buffer.from("vault")],
-      escrowProgram.programId
+      depositoryProgram.programId
     );
 
     {
@@ -90,11 +91,11 @@ describe("Relay Forwarder", () => {
       );
     }
 
-    // Initialize relay-escrow (only needed if running this test individually)
-    // await escrowProgram.methods
+    // Initialize relay-depository (only needed if running this test individually)
+    // await depositoryProgram.methods
     //   .initialize()
     //   .accountsPartial({
-    //     relayEscrow,
+    //     relayDepository,
     //     vault,
     //     owner: wallet.publicKey,
     //     allocator: wallet.publicKey,
@@ -190,9 +191,9 @@ describe("Relay Forwarder", () => {
         sender: sender.publicKey,
         depositor: depositor.publicKey,
         forwarder: forwarderPda,
-        relayEscrow,
+        relayDepository,
         relayVault: vault,
-        relayEscrowProgram: escrowProgram.programId,
+        relayDepositoryProgram: depositoryProgram.programId,
         systemProgram: anchor.web3.SystemProgram.programId,
       })
       .rpc();
@@ -241,7 +242,7 @@ describe("Relay Forwarder", () => {
       if (!logMessage.startsWith("Program data: ")) {
         continue;
       }
-      const event = escrowProgram.coder.events.decode(
+      const event = depositoryProgram.coder.events.decode(
         logMessage.slice("Program data: ".length)
       );
       if (event) {
@@ -314,12 +315,12 @@ describe("Relay Forwarder", () => {
       .accountsPartial({
         sender: sender.publicKey,
         depositor: depositor.publicKey,
-        relayEscrow,
+        relayDepository,
         relayVault: vault,
         mint,
         forwarderTokenAccount: forwarderAta,
         relayVaultTokenAccount: vaultAta,
-        relayEscrowProgram: escrowProgram.programId,
+        relayDepositoryProgram: depositoryProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
@@ -339,7 +340,7 @@ describe("Relay Forwarder", () => {
       if (!logMessage.startsWith("Program data: ")) {
         continue;
       }
-      const event = escrowProgram.coder.events.decode(
+      const event = depositoryProgram.coder.events.decode(
         logMessage.slice("Program data: ".length)
       );
       if (event) {
@@ -458,12 +459,12 @@ describe("Relay Forwarder", () => {
         sender: sender.publicKey,
         depositor: depositor.publicKey,
         forwarder: forwarderPda,
-        relayEscrow,
+        relayDepository,
         relayVault: vault,
         mint: NATIVE_MINT,
         forwarderTokenAccount: forwarderWsolAta,
         relayVaultTokenAccount: vaultWsolAta,
-        relayEscrowProgram: escrowProgram.programId,
+        relayDepositoryProgram: depositoryProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
@@ -508,9 +509,9 @@ describe("Relay Forwarder", () => {
           sender: sender.publicKey,
           depositor: depositor.publicKey,
           forwarder: forwarderPda,
-          relayEscrow,
+          relayDepository,
           relayVault: vault,
-          relayEscrowProgram: escrowProgram.programId,
+          relayDepositoryProgram: depositoryProgram.programId,
           systemProgram: anchor.web3.SystemProgram.programId,
         })
         .rpc();

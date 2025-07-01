@@ -233,7 +233,7 @@ contract RelayDepositoryTest is BaseTest, EIP712 {
         relayDepository.execute(request, signature);
     }
 
-    // Utils (copied from `RelayEscrow`)
+    // Utils (copied from `RelayDepository`)
 
     function _hashCallRequest(
         CallRequest memory request
@@ -271,7 +271,7 @@ contract RelayDepositoryTest is BaseTest, EIP712 {
         );
     }
 
-    // Overwrite _hashTypedData to use RelayEscrow's domain separator
+    // Overwrite _hashTypedData to use RelayDepository's domain separator
     function _hashTypedData(
         bytes32 structHash
     ) internal view override returns (bytes32 digest) {

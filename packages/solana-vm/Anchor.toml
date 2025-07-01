@@ -10,10 +10,10 @@ cluster = "Localnet"
 wallet = "~/.config/solana/id.json"
 
 [programs.localnet]
-relay_escrow = "5CdJurnC4uskc9fyUqPmsWZJcwc7XzyLrEWRanUtDYJT"
+relay_depository = "5CdJurnC4uskc9fyUqPmsWZJcwc7XzyLrEWRanUtDYJT"
 relay_forwarder = "Brjhojay2oUjBrrqmE2GmUKEutbeDzDztQQsB9T3FsUj"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
 test-forwarder = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/relay-forwarder.ts"
-test-escrow = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/relay-escrow.ts"
+test-depository = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/relay-depository.ts"

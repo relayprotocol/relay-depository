@@ -20,4 +20,4 @@ idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 anchor-lang = "0.30.1"
 anchor-spl = "0.30.1"
 solana-program = "1.16"
-relay-escrow = { path = "../relay-escrow", features = ["cpi"] }
+relay-depository = { path = "../relay-depository", features = ["cpi"] }

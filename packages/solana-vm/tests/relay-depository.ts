@@ -24,15 +24,16 @@ import { assert } from "chai";
 import { sha256 } from "js-sha256";
 import nacl from "tweetnacl";
 
-import { RelayEscrow } from "../target/types/relay_escrow";
+import { RelayDepository } from "../target/types/relay_depository";
 
-describe("Relay Escrow", () => {
+describe("Relay Depository", () => {
   const provider = anchor.AnchorProvider.env();
 
   // Configure the client to use the local cluster
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.RelayEscrow as anchor.Program<RelayEscrow>;
+  const program = anchor.workspace
+    .RelayDepository as anchor.Program<RelayDepository>;
 
   // Test accounts
   const fakeOwner = Keypair.generate();
@@ -48,7 +49,7 @@ describe("Relay Escrow", () => {
   const wrongRecipient = Keypair.generate();
 
   // PDAs
-  let relayEscrowPDA: PublicKey;
+  let relayDepositoryPDA: PublicKey;
   let vaultPDA: PublicKey;
   let vaultBump: number;
 
@@ -89,8 +90,8 @@ describe("Relay Escrow", () => {
     );
 
     // Find PDAs
-    [relayEscrowPDA] = await PublicKey.findProgramAddress(
-      [Buffer.from("relay_escrow")],
+    [relayDepositoryPDA] = await PublicKey.findProgramAddress(
+      [Buffer.from("relay_depository")],
       program.programId
     );
 
@@ -229,7 +230,7 @@ describe("Relay Escrow", () => {
       await program.methods
         .initialize()
         .accountsPartial({
-          relayEscrow: relayEscrowPDA,
+          relayDepository: relayDepositoryPDA,
           vault: vaultPDA,
           owner: fakeOwner.publicKey,
           allocator: allocator.publicKey,
@@ -248,7 +249,7 @@ describe("Relay Escrow", () => {
     await program.methods
       .initialize()
       .accountsPartial({
-        relayEscrow: relayEscrowPDA,
+        relayDepository: relayDepositoryPDA,
         vault: vaultPDA,
         owner: owner.publicKey,
         allocator: allocator.publicKey,
@@ -258,12 +259,12 @@ describe("Relay Escrow", () => {
       .rpc();
 
     // Verify initialization
-    const relayEscrowAccount = await program.account.relayEscrow.fetch(
-      relayEscrowPDA
+    const relayDepositoryAccount = await program.account.relayDepository.fetch(
+      relayDepositoryPDA
     );
-    assert.ok(relayEscrowAccount.owner.equals(owner.publicKey));
-    assert.ok(relayEscrowAccount.allocator.equals(allocator.publicKey));
-    assert.equal(relayEscrowAccount.vaultBump, vaultBump);
+    assert.ok(relayDepositoryAccount.owner.equals(owner.publicKey));
+    assert.ok(relayDepositoryAccount.allocator.equals(allocator.publicKey));
+    assert.equal(relayDepositoryAccount.vaultBump, vaultBump);
   });
 
   it("Owner can set new allocator", async () => {
@@ -273,23 +274,23 @@ describe("Relay Escrow", () => {
     await program.methods
       .setAllocator(newAllocator.publicKey)
       .accountsPartial({
-        relayEscrow: relayEscrowPDA,
+        relayDepository: relayDepositoryPDA,
         owner: owner.publicKey,
       })
       .signers([owner])
       .rpc();
 
     // Verify the allocator was updated
-    const relayEscrowAccount = await program.account.relayEscrow.fetch(
-      relayEscrowPDA
+    const relayDepositoryAccount = await program.account.relayDepository.fetch(
+      relayDepositoryPDA
     );
-    assert.ok(relayEscrowAccount.allocator.equals(newAllocator.publicKey));
+    assert.ok(relayDepositoryAccount.allocator.equals(newAllocator.publicKey));
 
     // Reset allocator back to original for other tests
     await program.methods
       .setAllocator(allocator.publicKey)
       .accountsPartial({
-        relayEscrow: relayEscrowPDA,
+        relayDepository: relayDepositoryPDA,
         owner: owner.publicKey,
       })
       .signers([owner])
@@ -313,7 +314,7 @@ describe("Relay Escrow", () => {
       await program.methods
         .setAllocator(newAllocator.publicKey)
         .accountsPartial({
-          relayEscrow: relayEscrowPDA,
+          relayDepository: relayDepositoryPDA,
           owner: nonOwner.publicKey,
         })
         .signers([nonOwner])
@@ -325,10 +326,10 @@ describe("Relay Escrow", () => {
     }
 
     // Verify allocator was not changed
-    const relayEscrowAccount = await program.account.relayEscrow.fetch(
-      relayEscrowPDA
+    const relayDepositoryAccount = await program.account.relayDepository.fetch(
+      relayDepositoryPDA
     );
-    assert.ok(relayEscrowAccount.allocator.equals(allocator.publicKey));
+    assert.ok(relayDepositoryAccount.allocator.equals(allocator.publicKey));
   });
 
   it("Deposit native", async () => {
@@ -343,7 +344,7 @@ describe("Relay Escrow", () => {
     const depositTx = await program.methods
       .depositNative(new anchor.BN(depositAmount), id)
       .accountsPartial({
-        relayEscrow: relayEscrowPDA,
+        relayDepository: relayDepositoryPDA,
         sender: user.publicKey,
         depositor: user.publicKey,
         vault: vaultPDA,
@@ -410,7 +411,7 @@ describe("Relay Escrow", () => {
     const depositTx = await program.methods
       .depositToken(new anchor.BN(depositAmount), id)
       .accountsPartial({
-        relayEscrow: relayEscrowPDA,
+        relayDepository: relayDepositoryPDA,
         mint: mintPubkey,
         sender: user.publicKey,
         senderTokenAccount: userTokenAccount,
@@ -481,7 +482,7 @@ describe("Relay Escrow", () => {
     const depositTx = await program.methods
       .depositToken(new anchor.BN(depositAmount), id)
       .accountsPartial({
-        relayEscrow: relayEscrowPDA,
+        relayDepository: relayDepositoryPDA,
         mint: mint2022Pubkey,
         sender: user.publicKey,
         senderTokenAccount: user2022TokenAccount,
@@ -609,7 +610,7 @@ describe("Relay Escrow", () => {
     const depositTx = await program.methods
       .depositToken(new anchor.BN(depositAmount), id)
       .accountsPartial({
-        relayEscrow: relayEscrowPDA,
+        relayDepository: relayDepositoryPDA,
         mint: mintWithFeePubkey,
         sender: user.publicKey,
         senderTokenAccount: userFeeTokenAccount,
@@ -696,7 +697,7 @@ describe("Relay Escrow", () => {
       await program.methods
         .depositToken(new anchor.BN(depositAmount), id)
         .accountsPartial({
-          relayEscrow: relayEscrowPDA,
+          relayDepository: relayDepositoryPDA,
           mint: mintPubkey,
           sender: user.publicKey,
           senderTokenAccount: userTokenAccount,
@@ -760,7 +761,7 @@ describe("Relay Escrow", () => {
           mint: null,
           vaultTokenAccount: null,
           recipientTokenAccount: null,
-          relayEscrow: relayEscrowPDA,
+          relayDepository: relayDepositoryPDA,
           executor: provider.wallet.publicKey,
           recipient: recipient.publicKey,
           vault: vaultPDA,
@@ -816,7 +817,7 @@ describe("Relay Escrow", () => {
         mint: null,
         vaultTokenAccount: null,
         recipientTokenAccount: null,
-        relayEscrow: relayEscrowPDA,
+        relayDepository: relayDepositoryPDA,
         executor: provider.wallet.publicKey,
         recipient: recipient.publicKey,
         vault: vaultPDA,
@@ -911,7 +912,7 @@ describe("Relay Escrow", () => {
         mint: mintPubkey,
         vaultTokenAccount,
         recipientTokenAccount,
-        relayEscrow: relayEscrowPDA,
+        relayDepository: relayDepositoryPDA,
         executor: provider.wallet.publicKey,
         recipient: recipient.publicKey,
         vault: vaultPDA,
@@ -985,7 +986,7 @@ describe("Relay Escrow", () => {
         mint: mint2022Pubkey,
         vaultTokenAccount: vault2022TokenAccount,
         recipientTokenAccount: recipient2022TokenAccount,
-        relayEscrow: relayEscrowPDA,
+        relayDepository: relayDepositoryPDA,
         executor: provider.wallet.publicKey,
         recipient: recipient.publicKey,
         vault: vaultPDA,
@@ -1056,7 +1057,7 @@ describe("Relay Escrow", () => {
           mint: null,
           vaultTokenAccount: null,
           recipientTokenAccount: null,
-          relayEscrow: relayEscrowPDA,
+          relayDepository: relayDepositoryPDA,
           executor: provider.wallet.publicKey,
           recipient: recipient.publicKey,
           vault: vaultPDA,
@@ -1102,7 +1103,7 @@ describe("Relay Escrow", () => {
         mint: null,
         vaultTokenAccount: null,
         recipientTokenAccount: null,
-        relayEscrow: relayEscrowPDA,
+        relayDepository: relayDepositoryPDA,
         executor: provider.wallet.publicKey,
         recipient: recipient.publicKey,
         vault: vaultPDA,
@@ -1129,7 +1130,7 @@ describe("Relay Escrow", () => {
           mint: null,
           vaultTokenAccount: null,
           recipientTokenAccount: null,
-          relayEscrow: relayEscrowPDA,
+          relayDepository: relayDepositoryPDA,
           executor: provider.wallet.publicKey,
           recipient: recipient.publicKey,
           vault: vaultPDA,
@@ -1179,7 +1180,7 @@ describe("Relay Escrow", () => {
           mint: null,
           vaultTokenAccount: null,
           recipientTokenAccount: null,
-          relayEscrow: relayEscrowPDA,
+          relayDepository: relayDepositoryPDA,
           executor: provider.wallet.publicKey,
           recipient: wrongRecipient.publicKey,
           vault: vaultPDA,
@@ -1236,7 +1237,7 @@ describe("Relay Escrow", () => {
           mint: mintPubkey,
           vaultTokenAccount,
           recipientTokenAccount: wrongRecipientTokenAccount,
-          relayEscrow: relayEscrowPDA,
+          relayDepository: relayDepositoryPDA,
           executor: provider.wallet.publicKey,
           recipient: wrongRecipient.publicKey,
           vault: vaultPDA,
@@ -1330,7 +1331,7 @@ describe("Relay Escrow", () => {
           mint: null,
           vaultTokenAccount: null,
           recipientTokenAccount: null,
-          relayEscrow: relayEscrowPDA,
+          relayDepository: relayDepositoryPDA,
           executor: provider.wallet.publicKey,
           recipient: recipient.publicKey,
           vault: vaultPDA,
@@ -1359,7 +1360,7 @@ describe("Relay Escrow", () => {
           mint: mintPubkey,
           vaultTokenAccount,
           recipientTokenAccount,
-          relayEscrow: relayEscrowPDA,
+          relayDepository: relayDepositoryPDA,
           executor: provider.wallet.publicKey,
           recipient: recipient.publicKey,
           vault: vaultPDA,
@@ -1484,7 +1485,7 @@ describe("Relay Escrow", () => {
           mint: null,
           vaultTokenAccount: null,
           recipientTokenAccount: null,
-          relayEscrow: relayEscrowPDA,
+          relayDepository: relayDepositoryPDA,
           executor: provider.wallet.publicKey,
           recipient: recipient.publicKey,
           vault: vaultPDA,
@@ -1513,7 +1514,7 @@ describe("Relay Escrow", () => {
           mint: null,
           vaultTokenAccount: null,
           recipientTokenAccount: null,
-          relayEscrow: relayEscrowPDA,
+          relayDepository: relayDepositoryPDA,
           executor: provider.wallet.publicKey,
           recipient: recipient.publicKey,
           vault: vaultPDA,
