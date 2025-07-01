@@ -23,10 +23,10 @@
     "name": "cronos",
     "chainId": 25,
     "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
+    "evmVersion": "london",
     "explorerUrl": "https://cronoscan.com/",
     "verificationFlags": "--chain 25",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
