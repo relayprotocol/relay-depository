@@ -30,4 +30,4 @@ The workflow of the Relay Depository follows this pattern:
 
 The Relay Depository contracts have undergone comprehensive security audits:
 
-- [Certora Security Audit](./audit-reports/Certora - Relay Escrow Report.pdf)
+- [Certora Security Audit](./audit-reports/Certora-Relay-Escrow-Report.pdf)
