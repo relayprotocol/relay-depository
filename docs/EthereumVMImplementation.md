@@ -4,6 +4,8 @@
 
 The EVM implementation provides secure deposit functionality and flexible execution of arbitrary smart contract calls through allocator-signed requests. It leverages EIP-712 structured data signing for secure authorization and supports both native ETH and ERC20 token deposits.
 
+**Source Code**: [/packages/ethereum-vm](/packages/ethereum-vm)
+
 ## Architecture
 
 ### Core Components

@@ -4,6 +4,8 @@
 
 The Solana implementation provides secure deposit and transfer functionality for native SOL and SPL tokens using Program Derived Addresses (PDAs) and Ed25519 signature verification.
 
+**Source Code**: [/packages/solana-vm](/packages/solana-vm)
+
 ## Architecture
 
 ### Core Components
