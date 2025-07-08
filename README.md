@@ -14,8 +14,8 @@ The protocol maintains consistent behavior across all blockchain environments wh
 
 - [Ethereum VM](./docs/EthereumVMImplementation.md)
 - [Solana VM](./docs/SolanaVMImplementation.md)
-- [Sui VM (Development)](./packages/sui-vm/)
-- [TON VM (Development)](./packages/ton-vm/)
+- [Sui VM (Development)](./docs/SuiVMImplementation.md)
+- [TON VM (Development)](./docs/TonVMImplementation.md)
 
 ## How It Works
 
