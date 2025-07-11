@@ -399,7 +399,7 @@ pub struct Initialize<'info> {
     pub relay_depository: Account<'info, RelayDepository>,
 
     /// PDA that will hold SOL deposits
-    /// This is a PDA derived from the VAULT_SEED
+    /// CHECK: This is a PDA derived from the VAULT_SEED
     #[account(
         mut,
         seeds = [VAULT_SEED],
@@ -413,9 +413,10 @@ pub struct Initialize<'info> {
     pub owner: Signer<'info>,
 
     /// The allocator account that will be authorized to sign transfer requests
-    /// Used as public key only
+    /// CHECK: Used as public key only
     pub allocator: UncheckedAccount<'info>,
 
+    // System program
     pub system_program: Program<'info, System>,
 }
 
@@ -464,9 +465,11 @@ pub struct DepositNative<'info> {
     pub sender: Signer<'info>,
 
     /// The account credited for the deposit
+    /// CHECK: The account credited for the deposit
     pub depositor: UncheckedAccount<'info>,
 
     /// The vault PDA that will receive the SOL
+    /// CHECK: The vault PDA that will receive the SOL
     #[account(
         mut,
         seeds = [VAULT_SEED],
@@ -493,9 +496,11 @@ pub struct DepositToken<'info> {
     pub sender: Signer<'info>,
 
     /// The account credited for the deposit
+    /// CHECK: The account credited for the deposit
     pub depositor: UncheckedAccount<'info>,
 
     /// The vault PDA that will receive the tokens
+    /// CHECK: The vault PDA that will receive the tokens
     #[account(
         seeds = [VAULT_SEED],
         bump = relay_depository.vault_bump
@@ -514,7 +519,7 @@ pub struct DepositToken<'info> {
     )]
     pub sender_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    /// The vault's token account
+    /// CHECK: The vault's token account
     #[account(mut)]
     pub vault_token_account: UncheckedAccount<'info>,
 
@@ -522,6 +527,7 @@ pub struct DepositToken<'info> {
     pub token_program: Interface<'info, TokenInterface>,
     /// The associated token program
     pub associated_token_program: Program<'info, AssociatedToken>,
+    /// The system program
     pub system_program: Program<'info, System>,
 }
 
@@ -529,7 +535,9 @@ pub struct DepositToken<'info> {
 #[derive(Accounts)]
 #[instruction(request: TransferRequest)]
 pub struct ExecuteTransfer<'info> {
+
     /// The relay depository account
+    /// CHECK: The relay depository account
     #[account(
         seeds = [RELAY_DEPOSITORY_SEED],
         bump
@@ -537,14 +545,17 @@ pub struct ExecuteTransfer<'info> {
     pub relay_depository: Account<'info, RelayDepository>,
 
     /// The executor of the transfer
+    /// CHECK: The executor of the transfer
     #[account(mut)]
     pub executor: Signer<'info>,
 
     /// The recipient of the transfer
+    /// CHECK: The recipient of the transfer
     #[account(mut)]
     pub recipient: UncheckedAccount<'info>,
 
     /// The vault PDA that will receive the tokens
+    /// CHECK: The vault PDA that will receive the tokens
     #[account(
         mut,
         seeds = [VAULT_SEED],
@@ -589,6 +600,7 @@ pub struct ExecuteTransfer<'info> {
     pub used_request: Account<'info, UsedRequest>,
 
     /// The instruction sysvar for ed25519 verification
+    /// CHECK: The instruction sysvar for ed25519 verification
     pub ix_sysvar: AccountInfo<'info>,
 
     /// The token program

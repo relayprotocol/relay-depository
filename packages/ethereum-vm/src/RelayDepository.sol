@@ -10,7 +10,9 @@ import {SignatureCheckerLib} from "solady/utils/SignatureCheckerLib.sol";
 import {Call, CallRequest, CallResult} from "./utils/RelayDepositoryStructs.sol";
 
 /// @title RelayDepository
-/// @author Relay
+/// @author Relay Protocol
+/// @notice Provides secure deposit functionality and execution of allocator-signed requests for EVM chains
+/// @dev EVM implementation using EIP-712 for structured data signing, supporting native ETH and ERC20 tokens
 contract RelayDepository is Ownable, EIP712 {
     using SafeTransferLib for address;
     using SignatureCheckerLib for address;
@@ -28,12 +30,20 @@ contract RelayDepository is Ownable, EIP712 {
     error CallRequestAlreadyUsed();
 
     /// @notice Revert if a call fails
+    /// @param returnData The data returned from the failed call
     error CallFailed(bytes returnData);
 
     /// @notice Emit event when a native deposit is made
+    /// @param from The address that made the deposit
+    /// @param amount The amount of native currency deposited
+    /// @param id The unique identifier associated with the deposit
     event RelayNativeDeposit(address from, uint256 amount, bytes32 id);
 
     /// @notice Emit event when an erc20 deposit is made
+    /// @param from The address that made the deposit
+    /// @param token The address of the ERC20 token
+    /// @param amount The amount of tokens deposited
+    /// @param id The unique identifier associated with the deposit
     event RelayErc20Deposit(
         address from,
         address token,
@@ -42,26 +52,35 @@ contract RelayDepository is Ownable, EIP712 {
     );
 
     /// @notice Emit event when a call is executed
+    /// @param id The identifier of the call request
+    /// @param call The call details that were executed
     event RelayCallExecuted(bytes32 id, Call call);
 
     /// @notice The EIP-712 typehash for the Call struct
+    /// @dev Used in structured data hashing for signature verification
     bytes32 public constant _CALL_TYPEHASH =
         keccak256(
             "Call(address to,bytes data,uint256 value,bool allowFailure)"
         );
 
     /// @notice The EIP-712 typehash for the CallRequest struct
+    /// @dev Used in structured data hashing for signature verification
     bytes32 public constant _CALL_REQUEST_TYPEHASH =
         keccak256(
             "CallRequest(Call[] calls,uint256 nonce,uint256 expiration)Call(address to,bytes data,uint256 value,bool allowFailure)"
         );
 
     /// @notice Set of executed call requests
+    /// @dev Maps the hash of a call request to whether it has been executed
     mapping(bytes32 => bool) public callRequests;
 
     /// @notice The allocator address
+    /// @dev Must be set to a secure and trusted entity
     address public allocator;
 
+    /// @notice Initializes the contract with an owner and allocator
+    /// @param _owner The address that will own the contract
+    /// @param _allocator The address authorized to sign withdrawal requests
     constructor(address _owner, address _allocator) {
         _initializeOwner(_owner);
         allocator = _allocator;
@@ -69,6 +88,7 @@ contract RelayDepository is Ownable, EIP712 {
 
     /// @notice Set the allocator address
     /// @param _allocator The new allocator address
+    /// @dev Only callable by the contract owner
     function setAllocator(address _allocator) external onlyOwner {
         if (_allocator == address(0)) {
             revert AddressCannotBeZero();
@@ -78,7 +98,8 @@ contract RelayDepository is Ownable, EIP712 {
 
     /// @notice Deposit native tokens and emit a `RelayNativeDeposit` event
     /// @param depositor The address of the depositor - set to `address(0)` to credit `msg.sender`
-    /// @param id The id associated with the deposit
+    /// @param id The identifier associated with the deposit
+    /// @dev Emits a RelayNativeDeposit event with the deposit details
     function depositNative(address depositor, bytes32 id) external payable {
         address depositorAddress = depositor == address(0)
             ? msg.sender
@@ -92,7 +113,8 @@ contract RelayDepository is Ownable, EIP712 {
     /// @param depositor The address of the depositor - set to `address(0)` to credit `msg.sender`
     /// @param token The erc20 token to deposit
     /// @param amount The amount to deposit
-    /// @param id The id associated with the deposit
+    /// @param id The identifier associated with the deposit
+    /// @dev Transfers tokens from msg.sender to this contract and emits a RelayErc20Deposit event
     function depositErc20(
         address depositor,
         address token,
@@ -113,7 +135,8 @@ contract RelayDepository is Ownable, EIP712 {
     /// @notice Deposit erc20 tokens and emit an `RelayErc20Deposit` event
     /// @param depositor The address of the depositor - set to `address(0)` to credit `msg.sender`
     /// @param token The erc20 token to deposit
-    /// @param id The id associated with the deposit
+    /// @param id The identifier associated with the deposit
+    /// @dev Uses the full allowance granted to this contract and calls depositErc20
     function depositErc20(
         address depositor,
         address token,
@@ -128,6 +151,7 @@ contract RelayDepository is Ownable, EIP712 {
     /// @param request The `CallRequest` to execute
     /// @param signature The signature from the allocator
     /// @return results The results of the calls
+    /// @dev Verifies the signature, expiration, and uniqueness before execution
     function execute(
         CallRequest calldata request,
         bytes memory signature
@@ -156,10 +180,11 @@ contract RelayDepository is Ownable, EIP712 {
         results = _executeCalls(structHash, request.calls);
     }
 
-    /// @notice Execute a list of calls
-    /// @param id The id of the call request
-    /// @param calls The calls to execute
-    /// @return returnData The results of the calls
+    /// @notice Internal function to execute a list of calls
+    /// @param id The identifier of the call request
+    /// @param calls The array of calls to execute
+    /// @return returnData The results of each executed call
+    /// @dev Handles multiple calls and properly manages failures based on allowFailure flag
     function _executeCalls(
         bytes32 id,
         Call[] calldata calls
@@ -202,6 +227,7 @@ contract RelayDepository is Ownable, EIP712 {
     /// @param request The `CallRequest` to hash
     /// @return structHash The struct hash
     /// @return eip712Hash The EIP712 hash
+    /// @dev Implements EIP-712 structured data hashing for the complex CallRequest type
     function _hashCallRequest(
         CallRequest calldata request
     ) internal view returns (bytes32 structHash, bytes32 eip712Hash) {
@@ -242,6 +268,7 @@ contract RelayDepository is Ownable, EIP712 {
     /// @notice Returns the domain name and version of the contract to be used in the domain separator
     /// @return name The domain name
     /// @return version The version
+    /// @dev Implements required function from EIP712 base contract
     function _domainNameAndVersion()
         internal
         pure
