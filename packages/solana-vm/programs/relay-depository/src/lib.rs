@@ -18,6 +18,12 @@ use anchor_spl::{
     token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
 
+/// 
+/// A Solana relay depository smart contract built with the Anchor framework. 
+/// This contract allows users to deposit SOL or SPL tokens and execute transfers with verified signatures.
+/// 
+
+/// 
 //----------------------------------------
 // Constants
 //----------------------------------------
@@ -44,7 +50,16 @@ declare_id!("99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2");
 pub mod relay_depository {
     use super::*;
 
-    // Initialize program with owner and allocator
+    /// Initialize the relay depository program with owner and allocator
+    ///
+    /// Creates and initializes the relay depository account with the specified
+    /// owner and allocator.
+    ///
+    /// # Parameters
+    /// * `ctx` - The context containing the accounts
+    ///
+    /// # Returns
+    /// * `Ok(())` on success
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let relay_depository = &mut ctx.accounts.relay_depository;
         relay_depository.owner = ctx.accounts.owner.key();
@@ -53,7 +68,17 @@ pub mod relay_depository {
         Ok(())
     }
 
-    // Update allocator
+    /// Update the allocator public key
+    ///
+    /// Allows the owner to change the authorized allocator that can sign transfer requests.
+    ///
+    /// # Parameters
+    /// * `ctx` - The context containing the accounts
+    /// * `new_allocator` - The public key of the new allocator
+    ///
+    /// # Returns
+    /// * `Ok(())` on success
+    /// * `Err(error)` if not authorized
     pub fn set_allocator(ctx: Context<SetAllocator>, new_allocator: Pubkey) -> Result<()> {
         let relay_depository = &mut ctx.accounts.relay_depository;
         require_keys_eq!(
@@ -65,8 +90,18 @@ pub mod relay_depository {
         Ok(())
     }
 
-    // Update owner
-    pub fn set_owner(ctx: Context<SetAllocator>, new_owner: Pubkey) -> Result<()> {
+    /// Update the owner public key
+    ///
+    /// Allows the current owner to transfer ownership to a new address.
+    ///
+    /// # Parameters
+    /// * `ctx` - The context containing the accounts
+    /// * `new_owner` - The public key of the new owner
+    ///
+    /// # Returns
+    /// * `Ok(())` on success
+    /// * `Err(error)` if not authorized
+    pub fn set_owner(ctx: Context<SetOwner>, new_owner: Pubkey) -> Result<()> {
         let relay_depository = &mut ctx.accounts.relay_depository;
         require_keys_eq!(
             ctx.accounts.owner.key(),
@@ -77,7 +112,18 @@ pub mod relay_depository {
         Ok(())
     }
 
-    // Deposit native tokens
+
+    /// Deposit native SOL tokens into the vault
+    ///
+    /// Transfers SOL from the sender to the vault and emits a deposit event.
+    ///
+    /// # Parameters
+    /// * `ctx` - The context containing the accounts
+    /// * `amount` - The amount of SOL to deposit
+    /// * `id` - A unique identifier for the deposit
+    ///
+    /// # Returns
+    /// * `Ok(())` on success
     pub fn deposit_native(ctx: Context<DepositNative>, amount: u64, id: [u8; 32]) -> Result<()> {
         // Transfer to vault
         invoke(
@@ -103,7 +149,18 @@ pub mod relay_depository {
         Ok(())
     }
 
-    // Deposit spl tokens
+    /// Deposit SPL tokens into the vault
+    ///
+    /// Creates the vault's token account if needed, transfers tokens from the sender,
+    /// and emits a deposit event.
+    ///
+    /// # Parameters
+    /// * `ctx` - The context containing the accounts
+    /// * `amount` - The amount of tokens to deposit
+    /// * `id` - A unique identifier for the deposit
+    ///
+    /// # Returns
+    /// * `Ok(())` on success
     pub fn deposit_token(ctx: Context<DepositToken>, amount: u64, id: [u8; 32]) -> Result<()> {
         // Create associated token account for the vault if needed
         if ctx.accounts.vault_token_account.data_is_empty() {
@@ -162,7 +219,18 @@ pub mod relay_depository {
         Ok(())
     }
 
-    // Execute transfer with allocator signature
+    /// Execute a transfer with allocator signature
+    ///
+    /// Verifies the allocator's signature, transfers tokens to the recipient,
+    /// and marks the request as used.
+    ///
+    /// # Parameters
+    /// * `ctx` - The context containing the accounts
+    /// * `request` - The transfer request details and signature
+    ///
+    /// # Returns
+    /// * `Ok(())` on success
+    /// * `Err(error)` if signature is invalid or request can't be processed
     pub fn execute_transfer(ctx: Context<ExecuteTransfer>, request: TransferRequest) -> Result<()> {
         let relay_depository = &ctx.accounts.relay_depository;
         let used_request = &mut ctx.accounts.used_request;
@@ -286,17 +354,28 @@ pub mod relay_depository {
 // Account Structures
 //----------------------------------------
 
+/// Relay depository account that stores configuration and state
+/// 
+/// This account is a PDA derived from the `RELAY_DEPOSITORY_SEED` and
+/// contains the ownership and allocation information.
 #[account]
 #[derive(InitSpace)]
 pub struct RelayDepository {
+    /// The owner of the relay depository who can update settings
     pub owner: Pubkey,
+    /// The authorized allocator that can sign transfer requests
     pub allocator: Pubkey,
+    /// The bump seed for the vault PDA, used for deriving the vault address
     pub vault_bump: u8,
 }
 
+/// Account that tracks whether a transfer request has been used
+/// 
+/// This account is created for each transfer request to prevent replay attacks.
 #[account]
 #[derive(InitSpace)]
 pub struct UsedRequest {
+    /// Flag indicating whether the request has been processed
     pub is_used: bool,
 }
 
@@ -304,8 +383,11 @@ pub struct UsedRequest {
 // Instruction Contexts
 //----------------------------------------
 
+/// Accounts required for initializing the relay depository
 #[derive(Accounts)]
 pub struct Initialize<'info> {
+    /// The relay depository account to be initialized
+    /// This is a PDA derived from the RELAY_DEPOSITORY_SEED
     #[account(
         init,
         payer = owner,
@@ -316,7 +398,8 @@ pub struct Initialize<'info> {
     )]
     pub relay_depository: Account<'info, RelayDepository>,
 
-    /// CHECK: PDA that will hold SOL
+    /// PDA that will hold SOL deposits
+    /// CHECK: This is a PDA derived from the VAULT_SEED
     #[account(
         mut,
         seeds = [VAULT_SEED],
@@ -324,52 +407,69 @@ pub struct Initialize<'info> {
     )]
     pub vault: UncheckedAccount<'info>,
 
+    /// The owner account that pays for initialization
+    /// Must match the AUTHORIZED_PUBKEY
     #[account(mut)]
     pub owner: Signer<'info>,
 
+    /// The allocator account that will be authorized to sign transfer requests
     /// CHECK: Used as public key only
     pub allocator: UncheckedAccount<'info>,
 
+    // System program
     pub system_program: Program<'info, System>,
 }
 
+/// Accounts required for updating the allocator
 #[derive(Accounts)]
 pub struct SetAllocator<'info> {
+    /// The relay depository account to update
     #[account(
         mut,
         seeds = [RELAY_DEPOSITORY_SEED],
         bump
     )]
     pub relay_depository: Account<'info, RelayDepository>,
+
+    /// The owner of the relay depository
     pub owner: Signer<'info>,
 }
 
+/// Accounts required for updating the owner
 #[derive(Accounts)]
 pub struct SetOwner<'info> {
+    /// The relay depository account to update
     #[account(
         mut,
         seeds = [RELAY_DEPOSITORY_SEED],
         bump
     )]
     pub relay_depository: Account<'info, RelayDepository>,
+
+    /// The current owner of the relay depository
     pub owner: Signer<'info>,
 }
 
+/// Accounts required for depositing native currency
 #[derive(Accounts)]
 pub struct DepositNative<'info> {
+    /// The relay depository account
     #[account(
         seeds = [RELAY_DEPOSITORY_SEED],
         bump
     )]
     pub relay_depository: Account<'info, RelayDepository>,
 
+    /// The sender of the deposit
     #[account(mut)]
     pub sender: Signer<'info>,
 
-    /// CHECK: Used as public key only
+    /// The account credited for the deposit
+    /// CHECK: The account credited for the deposit
     pub depositor: UncheckedAccount<'info>,
 
-    /// CHECK: PDA vault that will hold tokens
+    /// The vault PDA that will receive the SOL
+    /// CHECK: The vault PDA that will receive the SOL
     #[account(
         mut,
         seeds = [VAULT_SEED],
@@ -377,32 +477,40 @@ pub struct DepositNative<'info> {
     )]
     pub vault: UncheckedAccount<'info>,
 
+    /// The system program
     pub system_program: Program<'info, System>,
 }
 
+/// Accounts required for depositing tokens
 #[derive(Accounts)]
 pub struct DepositToken<'info> {
+    /// The relay depository account
     #[account(
         seeds = [RELAY_DEPOSITORY_SEED],
         bump
     )]
     pub relay_depository: Account<'info, RelayDepository>,
 
+    /// The sender of the deposit
     #[account(mut)]
     pub sender: Signer<'info>,
 
-    /// CHECK: Used as public key only
+    /// The account credited for the deposit
+    /// CHECK: The account credited for the deposit
     pub depositor: UncheckedAccount<'info>,
 
-    /// CHECK: PDA that will hold tokens
+    /// The vault PDA that will receive the tokens
+    /// CHECK: The vault PDA that will receive the tokens
     #[account(
         seeds = [VAULT_SEED],
         bump = relay_depository.vault_bump
     )]
     pub vault: UncheckedAccount<'info>,
 
+    /// The mint of the token being deposited
     pub mint: InterfaceAccount<'info, Mint>,
 
+    /// The sender's token account
     #[account(
         mut,
         associated_token::mint = mint,
@@ -411,32 +519,43 @@ pub struct DepositToken<'info> {
     )]
     pub sender_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    /// CHECK: Will be initialized if needed
+    /// CHECK: The vault's token account
     #[account(mut)]
     pub vault_token_account: UncheckedAccount<'info>,
 
+    /// The token program
     pub token_program: Interface<'info, TokenInterface>,
+    /// The associated token program
     pub associated_token_program: Program<'info, AssociatedToken>,
+    /// The system program
     pub system_program: Program<'info, System>,
 }
 
+/// Accounts required for executing a transfer
 #[derive(Accounts)]
 #[instruction(request: TransferRequest)]
 pub struct ExecuteTransfer<'info> {
+
+    /// The relay depository account
+    /// CHECK: The relay depository account
     #[account(
         seeds = [RELAY_DEPOSITORY_SEED],
         bump
     )]
     pub relay_depository: Account<'info, RelayDepository>,
 
+    /// The executor of the transfer
+    /// CHECK: The executor of the transfer
     #[account(mut)]
     pub executor: Signer<'info>,
 
-    /// CHECK: Transfer recipient
+    /// The recipient of the transfer
+    /// CHECK: The recipient of the transfer
     #[account(mut)]
     pub recipient: UncheckedAccount<'info>,
 
-    /// CHECK: Native token vault PDA
+    /// The vault PDA that will receive the tokens
+    /// CHECK: The vault PDA that will receive the tokens
     #[account(
         mut,
         seeds = [VAULT_SEED],
@@ -444,8 +563,10 @@ pub struct ExecuteTransfer<'info> {
     )]
     pub vault: UncheckedAccount<'info>,
 
+    /// The mint of the token being transferred
     pub mint: Option<InterfaceAccount<'info, Mint>>,
 
+    /// The recipient's token account
     #[account(
         mut,
         associated_token::mint = mint,
@@ -454,6 +575,7 @@ pub struct ExecuteTransfer<'info> {
     )]
     pub recipient_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
 
+    /// The vault's token account
     #[account(
         mut,
         associated_token::mint = mint,
@@ -462,6 +584,9 @@ pub struct ExecuteTransfer<'info> {
     )]
     pub vault_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
 
+    /// The account that tracks whether a transfer request has been used
+    /// 
+    /// This account is created for each transfer request to prevent replay attacks.
     #[account(
         init,
         payer = executor,
@@ -474,11 +599,15 @@ pub struct ExecuteTransfer<'info> {
     )]
     pub used_request: Account<'info, UsedRequest>,
 
-    /// CHECK: For ed25519 verification
+    /// The instruction sysvar for ed25519 verification
+    /// CHECK: The instruction sysvar for ed25519 verification
     pub ix_sysvar: AccountInfo<'info>,
 
+    /// The token program
     pub token_program: Interface<'info, TokenInterface>,
+    /// The associated token program
     pub associated_token_program: Program<'info, AssociatedToken>,
+    /// The system program
     pub system_program: Program<'info, System>,
 }
 
@@ -486,16 +615,24 @@ pub struct ExecuteTransfer<'info> {
 // Custom Types
 //----------------------------------------
 
+/// Structure representing a transfer request signed by the allocator
 #[derive(AnchorSerialize, AnchorDeserialize, Copy, Clone, PartialEq, Debug)]
 pub struct TransferRequest {
+    /// The recipient of the transfer
     pub recipient: Pubkey,
-    pub token: Option<Pubkey>, // None for native tokens, Some(mint) for spl tokens
+    /// The token mint (None for native SOL, Some(mint) for SPL tokens)
+    pub token: Option<Pubkey>,
+    /// The amount to transfer
     pub amount: u64,
+    /// A unique nonce
     pub nonce: u64,
+    /// The expiration timestamp for the request
     pub expiration: i64,
 }
 
 impl TransferRequest {
+    /// Computes a hash of the serialized request for signature verification
+    /// and used request tracking
     pub fn get_hash(&self) -> Hash {
         hash(&self.try_to_vec().unwrap())
     }
@@ -505,18 +642,27 @@ impl TransferRequest {
 // Events
 //----------------------------------------
 
+/// Event emitted when a transfer is executed
 #[event]
 pub struct TransferExecutedEvent {
+    /// The transfer request that was executed
     pub request: TransferRequest,
+    /// The public key of the executor who processed the transfer
     pub executor: Pubkey,
+    /// The unique identifier for the used request account
     pub id: Pubkey,
 }
 
+/// Event emitted when a deposit is made
 #[event]
 pub struct DepositEvent {
+    /// The public key of the depositor
     pub depositor: Pubkey,
-    pub token: Option<Pubkey>, // None for native tokens, Some(mint) for spl tokens
+    /// The token mint (None for native SOL, Some(mint) for SPL tokens)
+    pub token: Option<Pubkey>,
+    /// The amount deposited
     pub amount: u64,
+    /// A unique identifier for the deposit
     pub id: [u8; 32],
 }
 
@@ -524,28 +670,50 @@ pub struct DepositEvent {
 // Error Definitions
 //----------------------------------------
 
+/// Custom error codes for the relay depository program
 #[error_code]
 pub enum CustomError {
+    /// Thrown when trying to execute a transfer request that has already been used
     #[msg("Transfer request has already been executed")]
     TransferRequestAlreadyUsed,
+
+    /// Thrown when the provided mint does not match the expected mint
     #[msg("Invalid mint")]
     InvalidMint,
+
+    /// Thrown when an account attempts an operation it is not authorized for
     #[msg("Unauthorized")]
     Unauthorized,
+
+    /// Thrown when the signature's signer doesn't match the expected allocator
     #[msg("Allocator signer mismatch")]
     AllocatorSignerMismatch,
+
+    /// Thrown when the signed message doesn't match the expected request
     #[msg("Message mismatch")]
     MessageMismatch,
+
+    /// Thrown when the Ed25519 signature data is malformed
     #[msg("Malformed Ed25519 data")]
     MalformedEd25519Data,
+
+    /// Thrown when a required signature is missing
     #[msg("Missing signature")]
     MissingSignature,
+
+    /// Thrown when the signature has expired
     #[msg("Signature expired")]
     SignatureExpired,
+
+    /// Thrown when the recipient doesn't match the expected recipient
     #[msg("Invalid recipient")]
     InvalidRecipient,
+
+    /// Thrown when the vault token account doesn't match the expected address
     #[msg("Invalid vault token account")]
     InvalidVaultTokenAccount,
+
+    /// Thrown when a transfer would leave the vault with insufficient balance for rent
     #[msg("Vault has insufficient balance to remain rent-exempt after transfer")]
     InsufficientVaultBalance,
 }
@@ -554,13 +722,27 @@ pub enum CustomError {
 // Helper Functions
 //----------------------------------------
 
-/// Taken from:
-/// https://github.com/solana-labs/perpetuals/blob/ebfb4972ea5d1cde8580a7e8c7b9dbd1fdb2b002/programs/perpetuals/src/instructions/set_custom_oracle_price_permissionless.rs#L90
+/// Validates an Ed25519 signature instruction
+///
+/// Verifies that the signature instruction is properly formatted,
+/// signed by the expected signer, and matches the expected request.
+///
+/// # Parameters
+/// * `signature_ix` - The signature instruction to validate
+/// * `expected_signer` - The expected signer of the instruction
+/// * `expected_request` - The expected transfer request that was signed
+///
+/// # Returns
+/// * `Ok(())` if the signature is valid
+/// * `Err(error)` if the signature is invalid
 fn validate_ed25519_signature_instruction(
     signature_ix: &Instruction,
     expected_signer: &Pubkey,
     expected_request: &TransferRequest,
 ) -> Result<()> {
+
+    // Taken from:
+    // https://github.com/solana-labs/perpetuals/blob/ebfb4972ea5d1cde8580a7e8c7b9dbd1fdb2b002/programs/perpetuals/src/instructions/set_custom_oracle_price_permissionless.rs#L90
     // Verify program ID
     require_eq!(
         signature_ix.program_id,
@@ -595,10 +777,21 @@ fn validate_ed25519_signature_instruction(
     Ok(())
 }
 
-/// Taken from:
-/// https://github.com/raydium-io/raydium-clmm/blob/eb7c392be9c8ef8af6eefb92ff834fc41ab975e3/programs/amm/src/util/token.rs#L218C1-L238C2
-/// Calculate the fee for input amount
+
+/// Calculates the transfer fee for a token
+///
+/// Determines the fee amount for the given mint and transfer amount,
+/// taking into account the token extension for transfer fees if present.
+///
+/// # Parameters
+/// * `mint_account` - The mint account of the token
+/// * `pre_fee_amount` - The amount to transfer before fees
+///
+/// # Returns
+/// * The calculated fee amount
 pub fn get_transfer_fee(mint_account: &InterfaceAccount<Mint>, pre_fee_amount: u64) -> Result<u64> {
+    /// Taken from:
+    /// https://github.com/raydium-io/raydium-clmm/blob/eb7c392be9c8ef8af6eefb92ff834fc41ab975e3/programs/amm/src/util/token.rs#L218C1-L238C2
     let mint_info = mint_account.to_account_info();
     if *mint_info.owner == Token::id() {
         return Ok(0);
