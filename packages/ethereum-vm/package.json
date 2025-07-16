@@ -1,0 +1,7 @@
+{
+  "name": "hardhat-project",
+  "dependencies": {
+    "@nomicfoundation/hardhat-foundry": "^1.1.4",
+    "solidity-docgen": "^0.6.0-beta.36"
+  }
+}
