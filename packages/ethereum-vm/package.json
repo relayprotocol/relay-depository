@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@reservoir0x/relay-protocol-sdk": "^0.0.34",
+    "axios": "^1.10.0",
+    "ethers": "^6.15.0"
+  }
+}
