@@ -14,6 +14,8 @@ $ forge test
 
 ### Deployment
 
+Warning! For deterministic deployment make sure you're on commit `490858d742d1083bc4e3c2884798f6491dc72abb`.
+
 The contracts deployment script is available in `./script/RelayDepositoryDeployer.s.sol`. It requires the following environment variables:
 
 - `DEPLOYER_PK`: the private key of the deployer wallet
