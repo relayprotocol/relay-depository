@@ -184,11 +184,11 @@
     "name": "metis",
     "chainId": 1088,
     "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
+    "evmVersion": "london",
     "explorerUrl": "https://explorer.metis.io",
     "verificationFlags": "--chain 1088 --verifier blockscout --verifier-url https://api.routescan.io/v2/network/mainnet/evm/1088/etherscan/api",
     "additionalNotes": "Requires using the --legacy flag since the chain is not EIP1559-compatible",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
@@ -317,10 +317,10 @@
     "name": "hychain",
     "chainId": 2911,
     "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
+    "evmVersion": "london",
     "explorerUrl": "https://explorer.hychain.com",
     "verificationFlags": "--chain 2911 --verifier blockscout --verifier-url https://explorer.hychain.com/api",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
@@ -620,10 +620,10 @@
     "name": "taiko",
     "chainId": 167000,
     "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
+    "evmVersion": "london",
     "explorerUrl": "https://taikoscan.io",
     "verificationFlags": "--chain 167000",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
