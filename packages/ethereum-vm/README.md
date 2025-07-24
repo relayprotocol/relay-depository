@@ -38,7 +38,7 @@ forge script ./script/RelayDepositoryDeployer.s.sol:RelayDepositoryDeployer \
 
 Do not forget to add the corresponding deployment information to the `./deployments/addresses.json` file! Also, please ensure all deployed contracts are verified!
 
-### Verification
+### Contract source code verification
 
 The above script should do the deployment and verification altogether. However, in cases when the verification failed for some reason, it can be triggered individually via the following commands:
 
@@ -47,3 +47,7 @@ forge verify-contract --chain $CHAIN $RELAY_DEPOSITORY ./src/RelayDepository.sol
 ```
 
 In case `forge` doesn't have any default explorer for a given chain, make sure to pass the following extra arguments to the `forge verify-contract` commands: `--verifier-url $VERIFIER_URL --etherscan-api-key $VERIFIER_API_KEY`.
+
+### Contract logic verification
+
+Since we need to deploy on a lot of chains which have different behaviour (eg. different supported evm version, with some opcodes not being available on some chains), it is important to ensure the logic of the contract works before going live with it on production. To help with that you can use the [`test-deposit-and-withdrawal`](./deployments/scripts/test-deposit-and-withdrawal.js) script which is going to execute a deposit to the depository and then request a withdrawal, ensuring both steps of the process work.
