@@ -192,6 +192,16 @@
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
+    "name": "polygon_zkevm",
+    "chainId": 1101,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "london",
+    "explorerUrl": "https://zkevm.polygonscan.com",
+    "verificationFlags": "--chain 1101",
+    "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
     "name": "lisk",
     "chainId": 1135,
     "compilerVersion": "0.8.28",
