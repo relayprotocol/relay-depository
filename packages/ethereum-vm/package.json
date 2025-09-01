@@ -2,6 +2,9 @@
   "dependencies": {
     "@reservoir0x/relay-protocol-sdk": "^0.0.34",
     "axios": "^1.10.0",
-    "ethers": "^6.15.0"
+    "ethers": "^6.15.0",
+    "solady": "^0.1.26",
+    "tronbox": "^4.3.0",
+    "tronweb": "^6.0.4"
   }
 }
