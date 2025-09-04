@@ -9,6 +9,10 @@ url = "https://api.apr.dev"
 cluster = "Localnet"
 wallet = "~/.config/solana/id.json"
 
+[programs.mainnet]
+relay_depository = "99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2"
+relay_forwarder = "DPArtTLbEqa6EuXHfL5UFLBZhFjiEXWRudhvXDrjwXUr"
+
 [programs.localnet]
 relay_depository = "5CdJurnC4uskc9fyUqPmsWZJcwc7XzyLrEWRanUtDYJT"
 relay_forwarder = "Brjhojay2oUjBrrqmE2GmUKEutbeDzDztQQsB9T3FsUj"

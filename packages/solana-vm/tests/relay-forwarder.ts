@@ -73,7 +73,7 @@ describe("Relay Forwarder", () => {
       const rentExemptMinimum =
         await provider.connection.getMinimumBalanceForRentExemption(0);
       const [forwarderPda] = anchor.web3.PublicKey.findProgramAddressSync(
-        [Buffer.from("forwarder")],
+        [Buffer.from("relay_forwarder")],
         forwarderProgram.programId
       );
 
@@ -155,7 +155,7 @@ describe("Relay Forwarder", () => {
 
     // Get forwarder PDA
     const [forwarderPda] = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("forwarder")],
+      [Buffer.from("relay_forwarder")],
       forwarderProgram.programId
     );
 
@@ -266,7 +266,7 @@ describe("Relay Forwarder", () => {
 
     // Get forwarder PDA and  its token account
     const [forwarderPda] = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("forwarder")],
+      [Buffer.from("relay_forwarder")],
       forwarderProgram.programId
     );
 
@@ -389,7 +389,7 @@ describe("Relay Forwarder", () => {
 
     // Get forwarder PDA and its wrapped SOL account
     const [forwarderPda] = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("forwarder")],
+      [Buffer.from("relay_forwarder")],
       forwarderProgram.programId
     );
 
@@ -498,7 +498,7 @@ describe("Relay Forwarder", () => {
   it("Should fail with insufficient balance", async () => {
     const id = Array.from(anchor.web3.Keypair.generate().publicKey.toBytes());
     const [forwarderPda] = anchor.web3.PublicKey.findProgramAddressSync(
-      [Buffer.from("forwarder")],
+      [Buffer.from("relay_forwarder")],
       forwarderProgram.programId
     );
 
