@@ -743,7 +743,8 @@ fn validate_ed25519_signature_instruction(
 
     // Taken from:
     // https://github.com/solana-labs/perpetuals/blob/ebfb4972ea5d1cde8580a7e8c7b9dbd1fdb2b002/programs/perpetuals/src/instructions/set_custom_oracle_price_permissionless.rs#L90
-    // Verify program ID
+    
+    // Verify program id
     require_eq!(
         signature_ix.program_id,
         solana_program::ed25519_program::id(),
@@ -751,26 +752,50 @@ fn validate_ed25519_signature_instruction(
     );
 
     let data = &signature_ix.data;
-
-    // Validate signature data structure
-    require!(data.len() >= 99, CustomError::MalformedEd25519Data);
-    require_eq!(data[0], 1, CustomError::MalformedEd25519Data);
     require!(
-        signature_ix.accounts.is_empty(),
+        signature_ix.accounts.is_empty() && data.len() == 144,
         CustomError::MalformedEd25519Data
     );
 
-    // Extract and verify signer public key bytes
-    let signer_pubkey = &signature_ix.data[16..16 + 32];
+    // Parse header fields
+    let num_signatures = data[0];
+    let padding = data[1];
+    let sig_off = u16::from_le_bytes(data[2..=3].try_into().unwrap()) as usize;
+    let sig_idx = u16::from_le_bytes(data[4..=5].try_into().unwrap());
+    let pk_off = u16::from_le_bytes(data[6..=7].try_into().unwrap()) as usize;
+    let pk_idx = u16::from_le_bytes(data[8..=9].try_into().unwrap());
+    let msg_off = u16::from_le_bytes(data[10..=11].try_into().unwrap()) as usize;
+    let msg_len = u16::from_le_bytes(data[12..=13].try_into().unwrap()) as usize;
+    let msg_idx = u16::from_le_bytes(data[14..=15].try_into().unwrap());
+
+    // Header checks
     require!(
-        signer_pubkey == expected_signer.to_bytes(),
+        num_signatures == 1
+            && padding == 0
+            && sig_idx == u16::MAX
+            && pk_idx == u16::MAX
+            && msg_idx == u16::MAX
+            && pk_off == 16
+            && sig_off == 48,
+        CustomError::MalformedEd25519Data
+    );
+
+    require!(data.len() >= pk_off + 32, CustomError::MalformedEd25519Data);
+    require!(data.len() >= sig_off + 64, CustomError::MalformedEd25519Data);
+    require!(data.len() >= msg_off + msg_len, CustomError::MalformedEd25519Data);
+
+    let data_pubkey = &data[pk_off..pk_off + 32];
+    let data_msg = &data[msg_off..msg_off + msg_len];
+
+    // Extract and verify signer public key bytes
+    require!(
+        data_pubkey == expected_signer.to_bytes(),
         CustomError::AllocatorSignerMismatch
     );
 
     // Verify message hash matches request hash
-    let message_hash = &data[112..112 + 32];
     let expected_hash = expected_request.get_hash().to_bytes();
-    if message_hash != expected_hash {
+    if data_msg != expected_hash {
         return Err(CustomError::MessageMismatch.into());
     }
 

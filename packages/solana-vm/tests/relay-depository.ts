@@ -19,6 +19,7 @@ import {
   Keypair,
   sendAndConfirmTransaction,
   Transaction,
+  TransactionInstruction,
 } from "@solana/web3.js";
 import { assert } from "chai";
 import { sha256 } from "js-sha256";
@@ -1081,6 +1082,60 @@ describe("Relay Depository", () => {
     }
   });
 
+  it("Should fail with invalid allocator signature by using malicious instruction", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 2;
+    const fakeAllocator = Keypair.generate();
+
+    const request = {
+      recipient: recipient.publicKey,
+      token: null,
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
+    };
+
+    const messagHash = hashRequest(request);
+
+    // Create invalid signature with fake allocator
+    const invalidSignature = nacl.sign.detached(
+      messagHash,
+      fakeAllocator.secretKey
+    );
+
+    const requestPDA = await getUsedRequestPDA(request);
+
+    const instr = createMaliciousEd25519Instruction(
+      allocator.publicKey.toBytes(),
+      fakeAllocator.publicKey.toBytes(),
+      messagHash,
+      invalidSignature
+    );
+
+    try {
+      await program.methods
+        .executeTransfer(request)
+        .accountsPartial({
+          mint: null,
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayDepository: relayDepositoryPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([instr])
+        .rpc();
+      assert.fail("Should have failed with invalid signature");
+    } catch (e) {
+      assert.include(e.message, "MalformedEd25519Data");
+    }
+  });
+
   it("Should not allow double execution of same request", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 2;
 
@@ -1618,3 +1673,48 @@ async function createMintWithTransferFee(
 
   return mintKeypair.publicKey;
 }
+
+const createMaliciousEd25519Instruction = (
+  allocatorPubkey: Uint8Array,
+  realPublicKey: Uint8Array,
+  message: Uint8Array,
+  signature: Uint8Array,
+  instructionIndex?: number
+): TransactionInstruction => {
+  // Ed25519 instruction layout offsets
+  const ED25519_INSTRUCTION_LAYOUT_SIZE = 16; // Size of the instruction header
+  const fakePublicKeyOffset = ED25519_INSTRUCTION_LAYOUT_SIZE; // This will contain allocator pubkey for validation
+  const signatureOffset = fakePublicKeyOffset + allocatorPubkey.length;
+  const messageDataOffset = signatureOffset + signature.length;
+  const realPublicKeyOffset = messageDataOffset + message.length; // Real pubkey goes at the end
+  const numSignatures = 1;
+
+  const instructionData = Buffer.alloc(
+    realPublicKeyOffset + realPublicKey.length
+  );
+
+  const index = instructionIndex == null ? 0xffff : instructionIndex;
+
+  // Write instruction layout header - publicKeyOffset points to the real key at the end
+  instructionData.writeUInt8(numSignatures, 0); // numSignatures
+  instructionData.writeUInt8(0, 1); // padding
+  instructionData.writeUInt16LE(signatureOffset, 2); // signatureOffset
+  instructionData.writeUInt16LE(index, 4); // signatureInstructionIndex
+  instructionData.writeUInt16LE(realPublicKeyOffset, 6); // publicKeyOffset - points to real key
+  instructionData.writeUInt16LE(index, 8); // publicKeyInstructionIndex
+  instructionData.writeUInt16LE(messageDataOffset, 10); // messageDataOffset
+  instructionData.writeUInt16LE(message.length, 12); // messageDataSize
+  instructionData.writeUInt16LE(index, 14); // messageInstructionIndex
+
+  // Copy data - allocator pubkey at offset 16 (for validation check), real pubkey at the end
+  instructionData.set(allocatorPubkey, fakePublicKeyOffset);
+  instructionData.set(signature, signatureOffset);
+  instructionData.set(message, messageDataOffset);
+  instructionData.set(realPublicKey, realPublicKeyOffset);
+
+  return new TransactionInstruction({
+    keys: [],
+    programId: new PublicKey("Ed25519SigVerify111111111111111111111111111"),
+    data: instructionData,
+  });
+};
