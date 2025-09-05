@@ -250,7 +250,7 @@ pub mod relay_depository {
         // Validate allocator signature
         let cur_index: usize =
             sysvar::instructions::load_current_index_checked(&ctx.accounts.ix_sysvar)?.into();
-        require!(cur_index > 0, "cur_index should be greater than 0");
+        require!(cur_index > 0, CustomError::MalformedEd25519Data);
 
         let ed25519_instr_index = cur_index - 1;
         let signature_ix = sysvar::instructions::load_instruction_at_checked(
