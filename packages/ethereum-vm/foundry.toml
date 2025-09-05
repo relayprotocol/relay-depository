@@ -92,6 +92,7 @@ lordchain = "${LORDCHAIN_RPC_URL}"
 degen = "${DEGEN_RPC_URL}"
 ancient8 = "${ANCIENT8_RPC_URL}"
 rari = "${RARI_RPC_URL}"
+somnia = "${SOMNIA_RPC_URL}"
 # Testnets
 base-sepolia = "${BASE_SEPOLIA_RPC_URL}"
 sepolia = "${SEPOLIA_RPC_URL}"
