@@ -162,6 +162,20 @@ pub mod relay_depository {
     /// # Returns
     /// * `Ok(())` on success
     pub fn deposit_token(ctx: Context<DepositToken>, amount: u64, id: [u8; 32]) -> Result<()> {
+        // Ensure token program is either SPL Token or SPL Token 2022
+        require!(
+            ctx.accounts.token_program.key() == anchor_spl::token::ID
+            || ctx.accounts.token_program.key() == anchor_spl::token_2022::ID,
+            CustomError::InvalidTokenProgram
+        );
+
+        // Ensure mint is owned by the token program
+        require_keys_eq!(
+            *ctx.accounts.mint.to_account_info().owner,
+            ctx.accounts.token_program.key(),
+            CustomError::InvalidMint
+        );
+
         // Create associated token account for the vault if needed
         if ctx.accounts.vault_token_account.data_is_empty() {
             anchor_spl::associated_token::create(CpiContext::new(
@@ -699,10 +713,6 @@ pub enum CustomError {
     /// Thrown when the provided token program does not match the expected token program
     #[msg("Invalid token program")]
     InvalidTokenProgram,
-
-    /// Thrown when the instruction index is invalid
-    #[msg("Invalid instruction index")]
-    InvalidInstructionIndex,
 
     /// Thrown when an account attempts an operation it is not authorized for
     #[msg("Unauthorized")]
