@@ -250,7 +250,7 @@ pub mod relay_depository {
         // Validate allocator signature
         let cur_index: usize =
             sysvar::instructions::load_current_index_checked(&ctx.accounts.ix_sysvar)?.into();
-        assert!(cur_index > 0, "cur_index should be greater than 0");
+        require!(cur_index > 0, "cur_index should be greater than 0");
 
         let ed25519_instr_index = cur_index - 1;
         let signature_ix = sysvar::instructions::load_instruction_at_checked(
@@ -323,6 +323,21 @@ pub mod relay_depository {
                     request.recipient,
                     CustomError::InvalidRecipient
                 );
+
+                // Ensure token program is either SPL Token or SPL Token 2022
+                require!(
+                    ctx.accounts.token_program.key() == anchor_spl::token::ID
+                    || ctx.accounts.token_program.key() == anchor_spl::token_2022::ID,
+                    CustomError::InvalidTokenProgram
+                );
+                
+                // Ensure mint is owned by the token program
+                require_keys_eq!(
+                    *ctx.accounts.mint.as_ref().unwrap().to_account_info().owner,
+                    ctx.accounts.token_program.key(),
+                    CustomError::InvalidMint
+                );
+
                 transfer_checked(
                     CpiContext::new_with_signer(
                         ctx.accounts.token_program.to_account_info(),
@@ -680,6 +695,14 @@ pub enum CustomError {
     /// Thrown when the provided mint does not match the expected mint
     #[msg("Invalid mint")]
     InvalidMint,
+
+    /// Thrown when the provided token program does not match the expected token program
+    #[msg("Invalid token program")]
+    InvalidTokenProgram,
+
+    /// Thrown when the instruction index is invalid
+    #[msg("Invalid instruction index")]
+    InvalidInstructionIndex,
 
     /// Thrown when an account attempts an operation it is not authorized for
     #[msg("Unauthorized")]
