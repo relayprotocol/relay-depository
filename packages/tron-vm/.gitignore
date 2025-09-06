@@ -1,0 +1,7 @@
+# Compiler files
+build/
+node_modules/
+yarn.lock
+
+deployments/development-deployment.json
+.env
