@@ -50,22 +50,22 @@
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
-    "name": "polygon",
-    "chainId": 137,
-    "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
-    "explorerUrl": "https://polygonscan.com/",
-    "verificationFlags": "--chain 137",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
-    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
-  },
-  {
     "name": "unichain",
     "chainId": 130,
     "compilerVersion": "0.8.28",
     "evmVersion": "cancun",
     "explorerUrl": "https://uniscan.xyz",
     "verificationFlags": "--chain 130",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "polygon",
+    "chainId": 137,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://polygonscan.com/",
+    "verificationFlags": "--chain 137",
     "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
@@ -334,6 +334,16 @@
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
+    "name": "somnia",
+    "chainId": 5031,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.somnia.network",
+    "verificationFlags": "--chain 5031 --verifier blockscout --verifier-url https://explorer.somnia.network/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
     "name": "superseed",
     "chainId": 5330,
     "compilerVersion": "0.8.28",
@@ -390,6 +400,16 @@
     "evmVersion": "cancun",
     "explorerUrl": "https://basescan.org",
     "verificationFlags": "--chain 8453",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "plasma",
+    "chainId": 9745,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://plasmascan.to",
+    "verificationFlags": "--chain 9745 --verifier blockscout --verifier-url https://plasmascan.to/api",
     "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
@@ -617,6 +637,16 @@
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
+    "name": "syndicate",
+    "chainId": 510003,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://commons.explorer.syndicate.io",
+    "verificationFlags": "--chain 510003 --verifier blockscout --verifier-url https://commons.explorer.syndicate.io/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
     "name": "scroll",
     "chainId": 534352,
     "compilerVersion": "0.8.28",
@@ -703,6 +733,16 @@
     "evmVersion": "cancun",
     "explorerUrl": "https://explorer.degen.tips",
     "verificationFlags": "--chain 666666666 --verifier blockscout --verifier-url https://explorer.degen.tips/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "metacade",
+    "chainId": 845300014,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://metacade-explorer.appchain.base.org",
+    "verificationFlags": "--chain 845300014 --verifier blockscout --verifier-url https://metacade-explorer.appchain.base.org/api",
     "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
