@@ -294,16 +294,6 @@
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
-    "name": "game7",
-    "chainId": 2187,
-    "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
-    "explorerUrl": "https://mainnet.game7.io",
-    "verificationFlags": "--chain 2187 --verifier blockscout --verifier-url https://mainnet.game7.io/api",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
-    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
-  },
-  {
     "name": "abstract",
     "chainId": 2741,
     "compilerVersion": "0.8.28",
@@ -341,16 +331,6 @@
     "explorerUrl": "https://explorer.mantle.xyz",
     "verificationFlags": "--chain 5000 --verifier blockscout --verifier-url https://explorer.mantle.xyz/api",
     "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
-    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
-  },
-  {
-    "name": "ham",
-    "chainId": 5112,
-    "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
-    "explorerUrl": "https://explorer.ham.fun",
-    "verificationFlags": "--chain 5112 --verifier blockscout --verifier-url https://explorer.ham.fun/api",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
