@@ -57,20 +57,28 @@ pub mod relay_depository {
     /// Initialize the relay depository program with owner and allocator
     ///
     /// Creates and initializes the relay depository account with the specified
-    /// owner, allocator, and chain ID for domain separation.
+    /// owner, allocator, and calculates the domain separator for cross-chain security.
     ///
     /// # Parameters
     /// * `ctx` - The context containing the accounts
-    /// * `chain_id` - The chain identifier for domain separation
+    /// * `chain_id` - The chain identifier (e.g., "solana-mainnet")
     ///
     /// # Returns
     /// * `Ok(())` on success
-    pub fn initialize(ctx: Context<Initialize>, chain_id: Vec<u8>) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, chain_id: String) -> Result<()> {
         let relay_depository = &mut ctx.accounts.relay_depository;
         relay_depository.owner = ctx.accounts.owner.key();
         relay_depository.allocator = ctx.accounts.allocator.key();
         relay_depository.vault_bump = ctx.bumps.vault;
-        relay_depository.chain_id = chain_id;
+        
+        // Calculate domain separator internally to ensure correctness
+        relay_depository.domain_separator = Some(create_domain_separator(
+            DOMAIN_NAME,
+            DOMAIN_VERSION,
+            chain_id.as_bytes(),
+            &crate::ID
+        ));
+        
         Ok(())
     }
 
@@ -115,6 +123,45 @@ pub mod relay_depository {
             CustomError::Unauthorized
         );
         relay_depository.owner = new_owner;
+        Ok(())
+    }
+
+    /// Migrate existing deployment to set domain separator
+    ///
+    /// This function is used for upgrading existing deployments to add domain separator support.
+    /// Only the owner can call this function, and it can only be called once.
+    ///
+    /// # Parameters
+    /// * `ctx` - The context containing the accounts
+    /// * `chain_id` - The chain identifier (e.g., "solana-mainnet")
+    ///
+    /// # Returns
+    /// * `Ok(())` on success
+    /// * `Err(error)` if not authorized or domain separator already set
+    pub fn migrate_domain_separator(ctx: Context<MigrateDomainSeparator>, chain_id: String) -> Result<()> {
+        let relay_depository = &mut ctx.accounts.relay_depository;
+        
+        // Only owner can migrate
+        require_keys_eq!(
+            ctx.accounts.owner.key(),
+            relay_depository.owner,
+            CustomError::Unauthorized
+        );
+        
+        // Can only migrate if domain separator is not set
+        require!(
+            relay_depository.domain_separator.is_none(),
+            CustomError::DomainSeparatorAlreadySet
+        );
+        
+        // Calculate and set domain separator
+        relay_depository.domain_separator = Some(create_domain_separator(
+            DOMAIN_NAME,
+            DOMAIN_VERSION,
+            chain_id.as_bytes(),
+            &crate::ID
+        ));
+        
         Ok(())
     }
 
@@ -291,8 +338,13 @@ pub mod relay_depository {
             CustomError::InvalidVaultAddress
         );
 
-        // Validate domain separator
-        validate_domain_separator(&request.domain, &ctx.program_id, &relay_depository.chain_id)?;
+        // Validate domain separator (if set)
+        if let Some(expected_domain) = relay_depository.domain_separator {
+            require!(
+                request.domain == expected_domain,
+                CustomError::InvalidDomainSeparator
+            );
+        }
 
         used_request.is_used = true;
 
@@ -412,8 +464,8 @@ pub struct RelayDepository {
     pub allocator: Pubkey,
     /// The bump seed for the vault PDA, used for deriving the vault address
     pub vault_bump: u8,
-    /// Chain identifier for domain separation (e.g., b"solana-mainnet")
-    pub chain_id: Vec<u8>,
+    /// Expected domain separator hash for this deployment (Optional for upgrade compatibility)
+    pub domain_separator: Option<[u8; 32]>,
 }
 
 /// Account that tracks whether a transfer request has been used
@@ -494,6 +546,21 @@ pub struct SetOwner<'info> {
     pub relay_depository: Account<'info, RelayDepository>,
 
     /// The current owner of the relay depository
+    pub owner: Signer<'info>,
+}
+
+/// Accounts required for migrating domain separator
+#[derive(Accounts)]
+pub struct MigrateDomainSeparator<'info> {
+    /// The relay depository account to update
+    #[account(
+        mut,
+        seeds = [RELAY_DEPOSITORY_SEED],
+        bump
+    )]
+    pub relay_depository: Account<'info, RelayDepository>,
+
+    /// The owner of the relay depository
     pub owner: Signer<'info>,
 }
 
@@ -662,24 +729,11 @@ pub struct ExecuteTransfer<'info> {
 // Custom Types
 //----------------------------------------
 
-/// EIP712-style domain separator for cross-chain signature security
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Debug)]
-pub struct DomainSeparator {
-    /// Protocol name
-    pub name: Vec<u8>,
-    /// Protocol version
-    pub version: Vec<u8>,
-    /// Chain identifier (e.g., b"solana-mainnet", b"eclipse-mainnet")
-    pub chain_id: Vec<u8>,
-    /// Verifying contract address (program ID)
-    pub verifying_contract: Pubkey,
-}
-
 /// Structure representing a transfer request signed by the allocator
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Debug)]
+#[derive(AnchorSerialize, AnchorDeserialize, Copy, Clone, PartialEq, Debug)]
 pub struct TransferRequest {
     /// Domain separator for EIP712-style signatures
-    pub domain: DomainSeparator,
+    pub domain: [u8; 32],
     /// The recipient of the transfer
     pub recipient: Pubkey,
     /// The token mint (None for native SOL, Some(mint) for SPL tokens)
@@ -792,6 +846,10 @@ pub enum CustomError {
     /// Thrown when the domain separator is invalid
     #[msg("Invalid domain separator")]
     InvalidDomainSeparator,
+
+    /// Thrown when trying to set domain separator on an already migrated contract
+    #[msg("Domain separator already set")]
+    DomainSeparatorAlreadySet,
 }
 
 //----------------------------------------
@@ -878,46 +936,29 @@ fn validate_ed25519_signature_instruction(
     Ok(())
 }
 
-/// Validates the domain separator for EIP712-style signatures
+/// Creates the expected domain separator hash
 ///
-/// Ensures the domain separator contains the correct program ID and expected values
-/// to prevent cross-chain signature replay attacks.
+/// Combines name, version, chain_id and program_id into a single hash
+/// for efficient validation and storage.
 ///
 /// # Parameters
-/// * `domain` - The domain separator from the transfer request
-/// * `program_id` - The current program ID
-/// * `expected_chain_id` - The chain ID stored in relay depository
+/// * `name` - Protocol name (e.g., b"RelayDepository")
+/// * `version` - Version bytes (e.g., b"1")
+/// * `chain_id` - Chain identifier (e.g., b"solana-mainnet")
+/// * `program_id` - The program ID
 ///
 /// # Returns
-/// * `Ok(())` if the domain separator is valid
-/// * `Err(error)` if the domain separator is invalid
-fn validate_domain_separator(domain: &DomainSeparator, program_id: &Pubkey, expected_chain_id: &Vec<u8>) -> Result<()> {
-    // Validate verifying contract matches current program ID
-    require_keys_eq!(
-        domain.verifying_contract,
-        *program_id,
-        CustomError::InvalidDomainSeparator
-    );
-
-    // Validate protocol name
-    require!(
-        domain.name == DOMAIN_NAME,
-        CustomError::InvalidDomainSeparator
-    );
-
-    // Validate version
-    require!(
-        domain.version == DOMAIN_VERSION,
-        CustomError::InvalidDomainSeparator
-    );
-
-    // Validate chain ID matches stored chain ID
-    require!(
-        domain.chain_id == *expected_chain_id,
-        CustomError::InvalidDomainSeparator
-    );
-
-    Ok(())
+/// * 32-byte domain separator hash
+pub fn create_domain_separator(name: &[u8], version: &[u8], chain_id: &[u8], program_id: &Pubkey) -> [u8; 32] {
+    use anchor_lang::solana_program::hash::hash;
+    
+    let mut data = Vec::new();
+    data.extend_from_slice(name);
+    data.extend_from_slice(version);
+    data.extend_from_slice(chain_id);
+    data.extend_from_slice(&program_id.to_bytes());
+    
+    hash(&data).to_bytes()
 }
 
 /// Calculates the transfer fee for a token
