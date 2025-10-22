@@ -333,13 +333,6 @@ pub mod relay_depository {
             &request,
         )?;
 
-        // Validate vault address matches the expected vault
-        require_keys_eq!(
-            ctx.accounts.vault.key(),
-            request.vault_address,
-            CustomError::InvalidVaultAddress
-        );
-
         // Validate domain separator (if set)
         if let Some(expected_domain) = relay_depository.domain_separator {
             require!(
@@ -753,8 +746,6 @@ pub struct TransferRequest {
     pub nonce: u64,
     /// The expiration timestamp for the request
     pub expiration: i64,
-    /// The vault address that funds will be withdrawn from
-    pub vault_address: Pubkey,
 }
 
 impl TransferRequest {
@@ -847,10 +838,6 @@ pub enum CustomError {
     /// Thrown when a transfer would leave the vault with insufficient balance for rent
     #[msg("Vault has insufficient balance to remain rent-exempt after transfer")]
     InsufficientVaultBalance,
-
-    /// Thrown when the vault address doesn't match the expected vault
-    #[msg("Invalid vault address")]
-    InvalidVaultAddress,
 
     /// Thrown when the domain separator is invalid
     #[msg("Invalid domain separator")]
