@@ -36,6 +36,10 @@ const USED_REQUEST_SEED: &[u8] = b"used_request";
 
 const VAULT_SEED: &[u8] = b"vault";
 
+const DOMAIN_NAME: &[u8] = b"RelayDepository";
+
+const DOMAIN_VERSION: &[u8] = b"1";
+
 //----------------------------------------
 // Program ID
 //----------------------------------------
@@ -53,18 +57,20 @@ pub mod relay_depository {
     /// Initialize the relay depository program with owner and allocator
     ///
     /// Creates and initializes the relay depository account with the specified
-    /// owner and allocator.
+    /// owner, allocator, and chain ID for domain separation.
     ///
     /// # Parameters
     /// * `ctx` - The context containing the accounts
+    /// * `chain_id` - The chain identifier for domain separation
     ///
     /// # Returns
     /// * `Ok(())` on success
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, chain_id: Vec<u8>) -> Result<()> {
         let relay_depository = &mut ctx.accounts.relay_depository;
         relay_depository.owner = ctx.accounts.owner.key();
         relay_depository.allocator = ctx.accounts.allocator.key();
         relay_depository.vault_bump = ctx.bumps.vault;
+        relay_depository.chain_id = chain_id;
         Ok(())
     }
 
@@ -278,6 +284,16 @@ pub mod relay_depository {
             &request,
         )?;
 
+        // Validate vault address matches the expected vault
+        require_keys_eq!(
+            ctx.accounts.vault.key(),
+            request.vault_address,
+            CustomError::InvalidVaultAddress
+        );
+
+        // Validate domain separator
+        validate_domain_separator(&request.domain, &ctx.program_id, &relay_depository.chain_id)?;
+
         used_request.is_used = true;
 
         let seeds: &[&[u8]] = &[VAULT_SEED, &[vault_bump]];
@@ -396,6 +412,8 @@ pub struct RelayDepository {
     pub allocator: Pubkey,
     /// The bump seed for the vault PDA, used for deriving the vault address
     pub vault_bump: u8,
+    /// Chain identifier for domain separation (e.g., b"solana-mainnet")
+    pub chain_id: Vec<u8>,
 }
 
 /// Account that tracks whether a transfer request has been used
@@ -644,9 +662,24 @@ pub struct ExecuteTransfer<'info> {
 // Custom Types
 //----------------------------------------
 
+/// EIP712-style domain separator for cross-chain signature security
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Debug)]
+pub struct DomainSeparator {
+    /// Protocol name
+    pub name: Vec<u8>,
+    /// Protocol version
+    pub version: Vec<u8>,
+    /// Chain identifier (e.g., b"solana-mainnet", b"eclipse-mainnet")
+    pub chain_id: Vec<u8>,
+    /// Verifying contract address (program ID)
+    pub verifying_contract: Pubkey,
+}
+
 /// Structure representing a transfer request signed by the allocator
-#[derive(AnchorSerialize, AnchorDeserialize, Copy, Clone, PartialEq, Debug)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Debug)]
 pub struct TransferRequest {
+    /// Domain separator for EIP712-style signatures
+    pub domain: DomainSeparator,
     /// The recipient of the transfer
     pub recipient: Pubkey,
     /// The token mint (None for native SOL, Some(mint) for SPL tokens)
@@ -657,6 +690,8 @@ pub struct TransferRequest {
     pub nonce: u64,
     /// The expiration timestamp for the request
     pub expiration: i64,
+    /// The vault address that funds will be withdrawn from
+    pub vault_address: Pubkey,
 }
 
 impl TransferRequest {
@@ -749,6 +784,14 @@ pub enum CustomError {
     /// Thrown when a transfer would leave the vault with insufficient balance for rent
     #[msg("Vault has insufficient balance to remain rent-exempt after transfer")]
     InsufficientVaultBalance,
+
+    /// Thrown when the vault address doesn't match the expected vault
+    #[msg("Invalid vault address")]
+    InvalidVaultAddress,
+
+    /// Thrown when the domain separator is invalid
+    #[msg("Invalid domain separator")]
+    InvalidDomainSeparator,
 }
 
 //----------------------------------------
@@ -835,6 +878,47 @@ fn validate_ed25519_signature_instruction(
     Ok(())
 }
 
+/// Validates the domain separator for EIP712-style signatures
+///
+/// Ensures the domain separator contains the correct program ID and expected values
+/// to prevent cross-chain signature replay attacks.
+///
+/// # Parameters
+/// * `domain` - The domain separator from the transfer request
+/// * `program_id` - The current program ID
+/// * `expected_chain_id` - The chain ID stored in relay depository
+///
+/// # Returns
+/// * `Ok(())` if the domain separator is valid
+/// * `Err(error)` if the domain separator is invalid
+fn validate_domain_separator(domain: &DomainSeparator, program_id: &Pubkey, expected_chain_id: &Vec<u8>) -> Result<()> {
+    // Validate verifying contract matches current program ID
+    require_keys_eq!(
+        domain.verifying_contract,
+        *program_id,
+        CustomError::InvalidDomainSeparator
+    );
+
+    // Validate protocol name
+    require!(
+        domain.name == DOMAIN_NAME,
+        CustomError::InvalidDomainSeparator
+    );
+
+    // Validate version
+    require!(
+        domain.version == DOMAIN_VERSION,
+        CustomError::InvalidDomainSeparator
+    );
+
+    // Validate chain ID matches stored chain ID
+    require!(
+        domain.chain_id == *expected_chain_id,
+        CustomError::InvalidDomainSeparator
+    );
+
+    Ok(())
+}
 
 /// Calculates the transfer fee for a token
 ///
