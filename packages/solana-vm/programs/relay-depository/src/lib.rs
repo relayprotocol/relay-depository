@@ -316,6 +316,13 @@ pub mod relay_depository {
             CustomError::SignatureExpired
         );
 
+        // Validate vault address matches the expected vault
+        require_keys_eq!(
+            ctx.accounts.vault.key(),
+            request.vault_address,
+            CustomError::InvalidVaultAddress
+        );
+
         // Validate allocator signature
         let cur_index: usize =
             sysvar::instructions::load_current_index_checked(&ctx.accounts.ix_sysvar)?.into();
@@ -746,6 +753,8 @@ pub struct TransferRequest {
     pub nonce: u64,
     /// The expiration timestamp for the request
     pub expiration: i64,
+    /// The vault address that funds will be withdrawn from
+    pub vault_address: Pubkey,
 }
 
 impl TransferRequest {
@@ -846,6 +855,10 @@ pub enum CustomError {
     /// Thrown when trying to set domain separator on an already migrated contract
     #[msg("Domain separator already set")]
     DomainSeparatorAlreadySet,
+
+    /// Thrown when the vault address doesn't match the expected vault
+    #[msg("Invalid vault address")]
+    InvalidVaultAddress,
 }
 
 //----------------------------------------

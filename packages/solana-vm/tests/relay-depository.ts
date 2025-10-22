@@ -1629,6 +1629,74 @@ describe("Relay Depository", () => {
     }
   });
 
+  it("Should fail execute transfer with invalid vault address", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 10; // 0.1 SOL
+    const wrongVault = Keypair.generate().publicKey; // Generate a wrong vault address
+
+    // Create transfer request with wrong vault address
+    const domain = createDomainSeparator(
+      "RelayDepository",
+      "1",
+      "solana-mainnet",
+      program.programId
+    );
+
+    const request = {
+      domain: Array.from(domain),
+      recipient: recipient.publicKey,
+      token: null, // SOL transfer
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
+      vaultAddress: wrongVault, // Use wrong vault address
+    };
+
+    const messagHash = hashRequest(request);
+
+    // Sign with allocator
+    const signature = nacl.sign.detached(messagHash, allocator.secretKey);
+    const requestPDA = await getUsedRequestPDA(request);
+
+    try {
+      await program.methods
+        .executeTransfer(request)
+        .accountsPartial({
+          mint: null,
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayDepository: relayDepositoryPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA, // Use correct vault in accounts but wrong vault in request
+          usedRequest: requestPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([
+          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+            publicKey: allocator.publicKey.toBytes(),
+            message: messagHash,
+            signature: signature,
+          }),
+        ])
+        .rpc();
+
+      assert.fail("Should have failed with invalid vault address");
+    } catch (err) {
+      assert.include(err.message, "InvalidVaultAddress");
+
+      // Verify request was not marked as used
+      try {
+        await program.account.usedRequest.fetch(requestPDA);
+        assert.fail("Request should not exist");
+      } catch (e) {
+        assert.include(e.message, "Account does not exist");
+      }
+    }
+  });
+
   const createTransferRequest = (
     recipient: PublicKey,
     token: PublicKey | null,
@@ -1650,6 +1718,7 @@ describe("Relay Depository", () => {
       amount,
       nonce,
       expiration,
+      vaultAddress: vaultPDA,
     };
   };
 
