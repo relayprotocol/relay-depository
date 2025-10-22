@@ -128,7 +128,8 @@ pub mod relay_depository {
 
     /// Migrate existing deployment to set domain separator
     ///
-    /// This function is used for upgrading existing deployments to add domain separator support.
+    /// This function uses Anchor's realloc to upgrade existing deployments for domain separator support.
+    /// The account will be automatically reallocated to accommodate the new field.
     /// Only the owner can call this function, and it can only be called once.
     ///
     /// # Parameters
@@ -155,6 +156,7 @@ pub mod relay_depository {
         );
         
         // Calculate and set domain separator
+        // The realloc constraint automatically handles account size expansion
         relay_depository.domain_separator = Some(create_domain_separator(
             DOMAIN_NAME,
             DOMAIN_VERSION,
@@ -552,16 +554,23 @@ pub struct SetOwner<'info> {
 /// Accounts required for migrating domain separator
 #[derive(Accounts)]
 pub struct MigrateDomainSeparator<'info> {
-    /// The relay depository account to update
+    /// The relay depository account to update with reallocation
     #[account(
         mut,
         seeds = [RELAY_DEPOSITORY_SEED],
-        bump
+        bump,
+        realloc = 8 + RelayDepository::INIT_SPACE,
+        realloc::payer = owner,
+        realloc::zero = false
     )]
     pub relay_depository: Account<'info, RelayDepository>,
 
-    /// The owner of the relay depository
+    /// The owner of the relay depository (also pays for reallocation)
+    #[account(mut)]
     pub owner: Signer<'info>,
+
+    /// System program for reallocation
+    pub system_program: Program<'info, System>,
 }
 
 /// Accounts required for depositing native currency
