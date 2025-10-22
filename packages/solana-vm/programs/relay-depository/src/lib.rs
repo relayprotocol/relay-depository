@@ -732,7 +732,7 @@ pub struct ExecuteTransfer<'info> {
 /// Structure representing a transfer request signed by the allocator
 #[derive(AnchorSerialize, AnchorDeserialize, Copy, Clone, PartialEq, Debug)]
 pub struct TransferRequest {
-    /// Domain separator for EIP712-style signatures
+    /// Domain separator
     pub domain: [u8; 32],
     /// The recipient of the transfer
     pub recipient: Pubkey,
