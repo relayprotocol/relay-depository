@@ -44,7 +44,7 @@ const DOMAIN_VERSION: &[u8] = b"1";
 // Program ID
 //----------------------------------------
 
-declare_id!("99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2");
+declare_id!("3bEbvrqSKwwUYS28HuRaDeDzn7S9KuZGY8WBZkjjWiyh");
 
 //----------------------------------------
 // Program Module
@@ -76,7 +76,7 @@ pub mod relay_depository {
             DOMAIN_NAME,
             DOMAIN_VERSION,
             chain_id.as_bytes(),
-            &crate::ID
+            &ctx.program_id
         ));
         
         Ok(())
@@ -161,7 +161,7 @@ pub mod relay_depository {
             DOMAIN_NAME,
             DOMAIN_VERSION,
             chain_id.as_bytes(),
-            &crate::ID
+            &ctx.program_id
         ));
         
         Ok(())
