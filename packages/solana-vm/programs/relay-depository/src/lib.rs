@@ -36,6 +36,10 @@ const USED_REQUEST_SEED: &[u8] = b"used_request";
 
 const VAULT_SEED: &[u8] = b"vault";
 
+const DOMAIN_NAME: &[u8] = b"RelayDepository";
+
+const DOMAIN_VERSION: &[u8] = b"1";
+
 //----------------------------------------
 // Program ID
 //----------------------------------------
@@ -53,18 +57,28 @@ pub mod relay_depository {
     /// Initialize the relay depository program with owner and allocator
     ///
     /// Creates and initializes the relay depository account with the specified
-    /// owner and allocator.
+    /// owner, allocator, and calculates the domain separator for cross-chain security.
     ///
     /// # Parameters
     /// * `ctx` - The context containing the accounts
+    /// * `chain_id` - The chain identifier (e.g., "solana-mainnet")
     ///
     /// # Returns
     /// * `Ok(())` on success
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, chain_id: String) -> Result<()> {
         let relay_depository = &mut ctx.accounts.relay_depository;
         relay_depository.owner = ctx.accounts.owner.key();
         relay_depository.allocator = ctx.accounts.allocator.key();
         relay_depository.vault_bump = ctx.bumps.vault;
+        
+        // Calculate domain separator internally to ensure correctness
+        relay_depository.domain_separator = Some(create_domain_separator(
+            DOMAIN_NAME,
+            DOMAIN_VERSION,
+            chain_id.as_bytes(),
+            &crate::ID
+        ));
+        
         Ok(())
     }
 
@@ -109,6 +123,47 @@ pub mod relay_depository {
             CustomError::Unauthorized
         );
         relay_depository.owner = new_owner;
+        Ok(())
+    }
+
+    /// Migrate existing deployment to set domain separator
+    ///
+    /// This function uses Anchor's realloc to upgrade existing deployments for domain separator support.
+    /// The account will be automatically reallocated to accommodate the new field.
+    /// Only the owner can call this function, and it can only be called once.
+    ///
+    /// # Parameters
+    /// * `ctx` - The context containing the accounts
+    /// * `chain_id` - The chain identifier (e.g., "solana-mainnet")
+    ///
+    /// # Returns
+    /// * `Ok(())` on success
+    /// * `Err(error)` if not authorized or domain separator already set
+    pub fn migrate_domain_separator(ctx: Context<MigrateDomainSeparator>, chain_id: String) -> Result<()> {
+        let relay_depository = &mut ctx.accounts.relay_depository;
+        
+        // Only owner can migrate
+        require_keys_eq!(
+            ctx.accounts.owner.key(),
+            relay_depository.owner,
+            CustomError::Unauthorized
+        );
+        
+        // Can only migrate if domain separator is not set
+        require!(
+            relay_depository.domain_separator.is_none(),
+            CustomError::DomainSeparatorAlreadySet
+        );
+        
+        // Calculate and set domain separator
+        // The realloc constraint automatically handles account size expansion
+        relay_depository.domain_separator = Some(create_domain_separator(
+            DOMAIN_NAME,
+            DOMAIN_VERSION,
+            chain_id.as_bytes(),
+            &crate::ID
+        ));
+        
         Ok(())
     }
 
@@ -261,6 +316,13 @@ pub mod relay_depository {
             CustomError::SignatureExpired
         );
 
+        // Validate vault address matches the expected vault
+        require_keys_eq!(
+            ctx.accounts.vault.key(),
+            request.vault_address,
+            CustomError::InvalidVaultAddress
+        );
+
         // Validate allocator signature
         let cur_index: usize =
             sysvar::instructions::load_current_index_checked(&ctx.accounts.ix_sysvar)?.into();
@@ -277,6 +339,14 @@ pub mod relay_depository {
             &relay_depository.allocator,
             &request,
         )?;
+
+        // Validate domain separator (if set)
+        if let Some(expected_domain) = relay_depository.domain_separator {
+            require!(
+                request.domain == expected_domain,
+                CustomError::InvalidDomainSeparator
+            );
+        }
 
         used_request.is_used = true;
 
@@ -396,6 +466,8 @@ pub struct RelayDepository {
     pub allocator: Pubkey,
     /// The bump seed for the vault PDA, used for deriving the vault address
     pub vault_bump: u8,
+    /// Expected domain separator hash for this deployment (Optional for upgrade compatibility)
+    pub domain_separator: Option<[u8; 32]>,
 }
 
 /// Account that tracks whether a transfer request has been used
@@ -477,6 +549,28 @@ pub struct SetOwner<'info> {
 
     /// The current owner of the relay depository
     pub owner: Signer<'info>,
+}
+
+/// Accounts required for migrating domain separator
+#[derive(Accounts)]
+pub struct MigrateDomainSeparator<'info> {
+    /// The relay depository account to update with reallocation
+    #[account(
+        mut,
+        seeds = [RELAY_DEPOSITORY_SEED],
+        bump,
+        realloc = 8 + RelayDepository::INIT_SPACE,
+        realloc::payer = owner,
+        realloc::zero = false
+    )]
+    pub relay_depository: Account<'info, RelayDepository>,
+
+    /// The owner of the relay depository (also pays for reallocation)
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    /// System program for reallocation
+    pub system_program: Program<'info, System>,
 }
 
 /// Accounts required for depositing native currency
@@ -647,6 +741,8 @@ pub struct ExecuteTransfer<'info> {
 /// Structure representing a transfer request signed by the allocator
 #[derive(AnchorSerialize, AnchorDeserialize, Copy, Clone, PartialEq, Debug)]
 pub struct TransferRequest {
+    /// Domain separator
+    pub domain: [u8; 32],
     /// The recipient of the transfer
     pub recipient: Pubkey,
     /// The token mint (None for native SOL, Some(mint) for SPL tokens)
@@ -657,6 +753,8 @@ pub struct TransferRequest {
     pub nonce: u64,
     /// The expiration timestamp for the request
     pub expiration: i64,
+    /// The vault address that funds will be withdrawn from
+    pub vault_address: Pubkey,
 }
 
 impl TransferRequest {
@@ -749,6 +847,18 @@ pub enum CustomError {
     /// Thrown when a transfer would leave the vault with insufficient balance for rent
     #[msg("Vault has insufficient balance to remain rent-exempt after transfer")]
     InsufficientVaultBalance,
+
+    /// Thrown when the domain separator is invalid
+    #[msg("Invalid domain separator")]
+    InvalidDomainSeparator,
+
+    /// Thrown when trying to set domain separator on an already migrated contract
+    #[msg("Domain separator already set")]
+    DomainSeparatorAlreadySet,
+
+    /// Thrown when the vault address doesn't match the expected vault
+    #[msg("Invalid vault address")]
+    InvalidVaultAddress,
 }
 
 //----------------------------------------
@@ -835,6 +945,30 @@ fn validate_ed25519_signature_instruction(
     Ok(())
 }
 
+/// Creates the expected domain separator hash
+///
+/// Combines name, version, chain_id and program_id into a single hash
+/// for efficient validation and storage.
+///
+/// # Parameters
+/// * `name` - Protocol name (e.g., b"RelayDepository")
+/// * `version` - Version bytes (e.g., b"1")
+/// * `chain_id` - Chain identifier (e.g., b"solana-mainnet")
+/// * `program_id` - The program ID
+///
+/// # Returns
+/// * 32-byte domain separator hash
+pub fn create_domain_separator(name: &[u8], version: &[u8], chain_id: &[u8], program_id: &Pubkey) -> [u8; 32] {
+    use anchor_lang::solana_program::hash::hash;
+    
+    let mut data = Vec::new();
+    data.extend_from_slice(name);
+    data.extend_from_slice(version);
+    data.extend_from_slice(chain_id);
+    data.extend_from_slice(&program_id.to_bytes());
+    
+    hash(&data).to_bytes()
+}
 
 /// Calculates the transfer fee for a token
 ///
