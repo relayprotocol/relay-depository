@@ -141,23 +141,52 @@ pub mod relay_depository {
     /// * `Err(error)` if not authorized or domain separator already set
     pub fn migrate_domain_separator(ctx: Context<MigrateDomainSeparator>, chain_id: String) -> Result<()> {
         let relay_info = &ctx.accounts.relay_depository;
+        
+        // Validate PDA
+        let (expected_pda, _bump) = Pubkey::find_program_address(
+            &[RELAY_DEPOSITORY_SEED],
+            ctx.program_id
+        );
+
+        require_keys_eq!(
+            expected_pda,
+            relay_info.key(),
+            CustomError::InvalidRelayDepositoryPDA
+        );
 
         // Read and store the current account data, then drop the borrow
         let (owner, allocator, vault_bump, current_size) = {
             let old_data_bytes = relay_info.try_borrow_data()?;
-            require!(old_data_bytes.len() >= 8 + 32 + 32 + 1, CustomError::MalformedEd25519Data);
             
-            // Check if already migrated (has domain_separator field)
-            if old_data_bytes.len() > 8 + 32 + 32 + 1 {
+            // Strict size validation for legacy RelayDepository (without domain_separator)
+            let expected_legacy_size = 8 + 32 + 32 + 1; // discriminator + owner + allocator + vault_bump
+            
+            // Check if already migrated (has domain_separator field) 
+            if old_data_bytes.len() > expected_legacy_size {
                 return Err(CustomError::DomainSeparatorAlreadySet.into());
             }
             
-            let mut cursor = &old_data_bytes[8..]; // Skip discriminator
-            let owner = Pubkey::new_from_array(cursor[0..32].try_into().unwrap());
-            cursor = &cursor[32..];
-            let allocator = Pubkey::new_from_array(cursor[0..32].try_into().unwrap()); 
-            cursor = &cursor[32..];
-            let vault_bump = cursor[0];
+            // Must be exactly the legacy size - no more, no less
+            require!(
+                old_data_bytes.len() == expected_legacy_size,
+                CustomError::InvalidAccountSize
+            );
+            
+            // Verify the account discriminator matches the original RelayDepository discriminator
+            // This is the discriminator from the pre-migration account: 80359cbdf353f56b
+            let expected_discriminator: [u8; 8] = [0x80, 0x35, 0x9c, 0xbd, 0xf3, 0x53, 0xf5, 0x6b];
+            require!(
+                old_data_bytes[0..8] == expected_discriminator,
+                CustomError::InvalidAccountDiscriminator
+            );
+            
+            // Safe data parsing with bounds checking
+            let data = &old_data_bytes[8..]; // Skip discriminator
+            require!(data.len() >= 65, CustomError::MalformedAccount); // 32 + 32 + 1
+            
+            let owner = Pubkey::new_from_array(data[0..32].try_into().unwrap());
+            let allocator = Pubkey::new_from_array(data[32..64].try_into().unwrap());
+            let vault_bump = data[64];
             let current_size = old_data_bytes.len();
             
             (owner, allocator, vault_bump, current_size)
@@ -168,6 +197,15 @@ pub mod relay_depository {
             ctx.accounts.owner.key(),
             owner,
             CustomError::Unauthorized
+        );
+
+        // Reentrancy protection: Check that this is not a nested call
+        let current_ix_index = anchor_lang::solana_program::sysvar::instructions::load_current_index_checked(
+            &ctx.accounts.ix_sysvar
+        )?;
+        require!(
+            current_ix_index == 0,
+            CustomError::ReentrancyDetected
         );
 
         // Manually reallocate the account
@@ -195,7 +233,7 @@ pub mod relay_depository {
                 )?;
             }
             
-            relay_info.realloc(new_size, false)?;
+            relay_info.realloc(new_size, true)?;
         }
         let new_struct = RelayDepository {
             owner,
@@ -620,6 +658,10 @@ pub struct MigrateDomainSeparator<'info> {
 
     /// System program for reallocation
     pub system_program: Program<'info, System>,
+
+    /// The instruction sysvar for reentrancy protection
+    /// CHECK: The instruction sysvar for reentrancy protection
+    pub ix_sysvar: AccountInfo<'info>,
 }
 
 /// Accounts required for depositing native currency
@@ -912,6 +954,26 @@ pub enum CustomError {
     /// Thrown when the account data write fails
     #[msg("Failed to write account data")]
     AccountWriteFailed,
+
+    /// Thrown when the relay depository PDA is invalid
+    #[msg("Invalid RelayDepository PDA")]
+    InvalidRelayDepositoryPDA,
+
+    /// Thrown when the account data is malformed
+    #[msg("Malformed account data")]
+    MalformedAccount,
+
+    /// Thrown when the account discriminator is invalid
+    #[msg("Invalid account discriminator")]
+    InvalidAccountDiscriminator,
+
+    /// Thrown when reentrancy is detected
+    #[msg("Reentrancy detected")]
+    ReentrancyDetected,
+
+    /// Thrown when the account size doesn't match expected legacy size
+    #[msg("Invalid account size for migration")]
+    InvalidAccountSize,
 }
 
 //----------------------------------------
