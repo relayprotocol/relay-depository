@@ -24,6 +24,7 @@ import {
 import { assert } from "chai";
 import { sha256 } from "js-sha256";
 import nacl from "tweetnacl";
+import { createHash } from "crypto";
 
 import { RelayDepository } from "../target/types/relay_depository";
 
@@ -1655,6 +1656,7 @@ describe("Relay Depository", () => {
       amount: new anchor.BN(transferAmount),
       nonce: sharedNonce,
       expiration: sharedExpiration,
+      vaultAddress: vaultPDA,
     };
 
     const mainnetMessageHash = hashRequest(mainnetRequest);
@@ -1706,7 +1708,7 @@ describe("Relay Depository", () => {
           relayDepository: relayDepositoryPDA,
           executor: provider.wallet.publicKey,
           recipient: recipient.publicKey,
-          vault: vaultPDA,
+          vault: vaultPDA, // Use correct vault in accounts but wrong vault in request
           usedRequest: testnetRequestPDA,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1756,6 +1758,7 @@ describe("Relay Depository", () => {
       amount,
       nonce,
       expiration,
+      vaultAddress: vaultPDA,
     };
   };
 
