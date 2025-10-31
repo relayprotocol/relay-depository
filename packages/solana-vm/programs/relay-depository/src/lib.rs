@@ -44,7 +44,7 @@ const DOMAIN_VERSION: &[u8] = b"1";
 // Program ID
 //----------------------------------------
 
-declare_id!("3bEbvrqSKwwUYS28HuRaDeDzn7S9KuZGY8WBZkjjWiyh");
+declare_id!("99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2");
 
 //----------------------------------------
 // Program Module
@@ -126,11 +126,11 @@ pub mod relay_depository {
         Ok(())
     }
 
-    /// Migrate existing deployment to set domain separator
+    /// Migrate an existing RelayDepository account to include the `domain_separator` field.
     ///
-    /// This function uses Anchor's realloc to upgrade existing deployments for domain separator support.
-    /// The account will be automatically reallocated to accommodate the new field.
-    /// Only the owner can call this function, and it can only be called once.
+    /// Reallocates legacy RelayDepository accounts to add the `domain_separator` field.
+    /// The existing data is preserved, and only this new field is appended in place.
+    /// Only the account owner can call this once, provided sufficient SOL for rent.
     ///
     /// # Parameters
     /// * `ctx` - The context containing the accounts
@@ -140,29 +140,80 @@ pub mod relay_depository {
     /// * `Ok(())` on success
     /// * `Err(error)` if not authorized or domain separator already set
     pub fn migrate_domain_separator(ctx: Context<MigrateDomainSeparator>, chain_id: String) -> Result<()> {
-        let relay_depository = &mut ctx.accounts.relay_depository;
-        
+        let relay_info = &ctx.accounts.relay_depository;
+
+        // Read and store the current account data, then drop the borrow
+        let (owner, allocator, vault_bump, current_size) = {
+            let old_data_bytes = relay_info.try_borrow_data()?;
+            require!(old_data_bytes.len() >= 8 + 32 + 32 + 1, CustomError::MalformedEd25519Data);
+            
+            // Check if already migrated (has domain_separator field)
+            if old_data_bytes.len() > 8 + 32 + 32 + 1 {
+                return Err(CustomError::DomainSeparatorAlreadySet.into());
+            }
+            
+            let mut cursor = &old_data_bytes[8..]; // Skip discriminator
+            let owner = Pubkey::new_from_array(cursor[0..32].try_into().unwrap());
+            cursor = &cursor[32..];
+            let allocator = Pubkey::new_from_array(cursor[0..32].try_into().unwrap()); 
+            cursor = &cursor[32..];
+            let vault_bump = cursor[0];
+            let current_size = old_data_bytes.len();
+            
+            (owner, allocator, vault_bump, current_size)
+        }; // Borrow is dropped here
+            
         // Only owner can migrate
         require_keys_eq!(
             ctx.accounts.owner.key(),
-            relay_depository.owner,
+            owner,
             CustomError::Unauthorized
         );
+
+        // Manually reallocate the account
+        let new_size = 8 + RelayDepository::INIT_SPACE;
         
-        // Can only migrate if domain separator is not set
-        require!(
-            relay_depository.domain_separator.is_none(),
-            CustomError::DomainSeparatorAlreadySet
-        );
+        if new_size > current_size {
+            let rent = Rent::get()?;
+            let new_minimum_balance = rent.minimum_balance(new_size);
+            let current_balance = relay_info.lamports();
+            
+            if new_minimum_balance > current_balance {
+                let additional_rent = new_minimum_balance - current_balance;
+                
+                invoke(
+                    &system_instruction::transfer(
+                        ctx.accounts.owner.key,
+                        relay_info.key,
+                        additional_rent,
+                    ),
+                    &[
+                        ctx.accounts.owner.to_account_info(),
+                        relay_info.to_account_info(),
+                        ctx.accounts.system_program.to_account_info(),
+                    ],
+                )?;
+            }
+            
+            relay_info.realloc(new_size, false)?;
+        }
+        let new_struct = RelayDepository {
+            owner,
+            allocator,
+            vault_bump,
+            domain_separator: Some(create_domain_separator(
+                DOMAIN_NAME,
+                DOMAIN_VERSION,
+                chain_id.as_bytes(),
+                &ctx.program_id,
+            )),
+        };
         
-        // Calculate and set domain separator
-        // The realloc constraint automatically handles account size expansion
-        relay_depository.domain_separator = Some(create_domain_separator(
-            DOMAIN_NAME,
-            DOMAIN_VERSION,
-            chain_id.as_bytes(),
-            &ctx.program_id
-        ));
+        let mut data = relay_info.try_borrow_mut_data()?;
+        let mut dst = &mut data[..];
+        new_struct
+            .try_serialize(&mut dst)
+            .map_err(|_| CustomError::AccountWriteFailed)?;
         
         Ok(())
     }
@@ -547,16 +598,14 @@ pub struct SetOwner<'info> {
 /// Accounts required for migrating domain separator
 #[derive(Accounts)]
 pub struct MigrateDomainSeparator<'info> {
-    /// The relay depository account to update with reallocation
+    /// The relay depository account to migrate in-place
+    /// CHECK: This is the existing relay depository account to be migrated
     #[account(
         mut,
         seeds = [RELAY_DEPOSITORY_SEED],
-        bump,
-        realloc = 8 + RelayDepository::INIT_SPACE,
-        realloc::payer = owner,
-        realloc::zero = false
+        bump
     )]
-    pub relay_depository: Account<'info, RelayDepository>,
+    pub relay_depository: UncheckedAccount<'info>,
 
     /// The owner of the relay depository (also pays for reallocation)
     #[account(mut)]
@@ -846,6 +895,9 @@ pub enum CustomError {
     /// Thrown when trying to set domain separator on an already migrated contract
     #[msg("Domain separator already set")]
     DomainSeparatorAlreadySet,
+
+    #[msg("Failed to write account data")]
+    AccountWriteFailed,
 }
 
 //----------------------------------------
