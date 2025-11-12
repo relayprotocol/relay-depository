@@ -90,7 +90,7 @@ describe('Relay Escrow', () => {
         USDC_TREASURYCAP_ID = coinData.treasuryCapId;
 
         // Set chainId
-        await configChainid(CHAIN_ID);
+        await configChainId(CHAIN_ID);
     });
 
     it('should set new allocator successfully', async () => {
@@ -1086,7 +1086,7 @@ describe('Relay Escrow', () => {
         }
     }
 
-    async function configChainid(chainId: string) {
+    async function configChainId(chainId: string) {
         const tx = new Transaction();
         tx.moveCall({
             target: `${PACKAGE_ID}::escrow::set_chain_id`,
