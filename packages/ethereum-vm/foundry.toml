@@ -94,6 +94,7 @@ degen = "${DEGEN_RPC_URL}"
 metacade = "${METACADE_RPC_URL}"
 ancient8 = "${ANCIENT8_RPC_URL}"
 rari = "${RARI_RPC_URL}"
+stable = "${STABLE_RPC_URL}"
 # Testnets
 base-sepolia = "${BASE_SEPOLIA_RPC_URL}"
 sepolia = "${SEPOLIA_RPC_URL}"
