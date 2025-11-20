@@ -76,7 +76,7 @@ pub mod relay_depository {
             DOMAIN_NAME,
             DOMAIN_VERSION,
             chain_id.as_bytes(),
-            &crate::ID
+            &ctx.program_id
         ));
         
         Ok(())
@@ -126,11 +126,11 @@ pub mod relay_depository {
         Ok(())
     }
 
-    /// Migrate existing deployment to set domain separator
+    /// Migrate an existing RelayDepository account to include the `domain_separator` field.
     ///
-    /// This function uses Anchor's realloc to upgrade existing deployments for domain separator support.
-    /// The account will be automatically reallocated to accommodate the new field.
-    /// Only the owner can call this function, and it can only be called once.
+    /// Reallocates legacy RelayDepository accounts to add the `domain_separator` field.
+    /// The existing data is preserved, and only this new field is appended in place.
+    /// Only the account owner can call this once, provided sufficient SOL for rent.
     ///
     /// # Parameters
     /// * `ctx` - The context containing the accounts
@@ -140,29 +140,118 @@ pub mod relay_depository {
     /// * `Ok(())` on success
     /// * `Err(error)` if not authorized or domain separator already set
     pub fn migrate_domain_separator(ctx: Context<MigrateDomainSeparator>, chain_id: String) -> Result<()> {
-        let relay_depository = &mut ctx.accounts.relay_depository;
+        let relay_info = &ctx.accounts.relay_depository;
         
+        // Validate PDA
+        let (expected_pda, _bump) = Pubkey::find_program_address(
+            &[RELAY_DEPOSITORY_SEED],
+            ctx.program_id
+        );
+
+        require_keys_eq!(
+            expected_pda,
+            relay_info.key(),
+            CustomError::InvalidRelayDepositoryPDA
+        );
+
+        // Read and store the current account data, then drop the borrow
+        let (owner, allocator, vault_bump, current_size) = {
+            let old_data_bytes = relay_info.try_borrow_data()?;
+            
+            // Strict size validation for legacy RelayDepository (without domain_separator)
+            let expected_legacy_size = 8 + 32 + 32 + 1; // discriminator + owner + allocator + vault_bump
+            
+            // Check if already migrated (has domain_separator field) 
+            if old_data_bytes.len() > expected_legacy_size {
+                return Err(CustomError::DomainSeparatorAlreadySet.into());
+            }
+            
+            // Must be exactly the legacy size - no more, no less
+            require!(
+                old_data_bytes.len() == expected_legacy_size,
+                CustomError::InvalidAccountSize
+            );
+            
+            // Verify the account discriminator matches the original RelayDepository discriminator
+            // This is the discriminator from the pre-migration account: 80359cbdf353f56b
+            let expected_discriminator: [u8; 8] = [0x80, 0x35, 0x9c, 0xbd, 0xf3, 0x53, 0xf5, 0x6b];
+            require!(
+                old_data_bytes[0..8] == expected_discriminator,
+                CustomError::InvalidAccountDiscriminator
+            );
+            
+            // Safe data parsing with bounds checking
+            let data = &old_data_bytes[8..]; // Skip discriminator
+            require!(data.len() >= 65, CustomError::MalformedAccount); // 32 + 32 + 1
+            
+            let owner = Pubkey::new_from_array(data[0..32].try_into().unwrap());
+            let allocator = Pubkey::new_from_array(data[32..64].try_into().unwrap());
+            let vault_bump = data[64];
+            let current_size = old_data_bytes.len();
+            
+            (owner, allocator, vault_bump, current_size)
+        }; // Borrow is dropped here
+            
         // Only owner can migrate
         require_keys_eq!(
             ctx.accounts.owner.key(),
-            relay_depository.owner,
+            owner,
             CustomError::Unauthorized
         );
-        
-        // Can only migrate if domain separator is not set
+
+        // Reentrancy protection: Check that this is not a nested call
+        let current_ix_index = anchor_lang::solana_program::sysvar::instructions::load_current_index_checked(
+            &ctx.accounts.ix_sysvar
+        )?;
         require!(
-            relay_depository.domain_separator.is_none(),
-            CustomError::DomainSeparatorAlreadySet
+            current_ix_index == 0,
+            CustomError::ReentrancyDetected
         );
+
+        // Manually reallocate the account
+        let new_size = 8 + RelayDepository::INIT_SPACE;
         
-        // Calculate and set domain separator
-        // The realloc constraint automatically handles account size expansion
-        relay_depository.domain_separator = Some(create_domain_separator(
-            DOMAIN_NAME,
-            DOMAIN_VERSION,
-            chain_id.as_bytes(),
-            &crate::ID
-        ));
+        if new_size > current_size {
+            let rent = Rent::get()?;
+            let new_minimum_balance = rent.minimum_balance(new_size);
+            let current_balance = relay_info.lamports();
+            
+            if new_minimum_balance > current_balance {
+                let additional_rent = new_minimum_balance - current_balance;
+                
+                invoke(
+                    &system_instruction::transfer(
+                        ctx.accounts.owner.key,
+                        relay_info.key,
+                        additional_rent,
+                    ),
+                    &[
+                        ctx.accounts.owner.to_account_info(),
+                        relay_info.to_account_info(),
+                        ctx.accounts.system_program.to_account_info(),
+                    ],
+                )?;
+            }
+            
+            relay_info.realloc(new_size, true)?;
+        }
+        let new_struct = RelayDepository {
+            owner,
+            allocator,
+            vault_bump,
+            domain_separator: Some(create_domain_separator(
+                DOMAIN_NAME,
+                DOMAIN_VERSION,
+                chain_id.as_bytes(),
+                &ctx.program_id,
+            )),
+        };
+        
+        let mut data = relay_info.try_borrow_mut_data()?;
+        let mut dst = &mut data[..];
+        new_struct
+            .try_serialize(&mut dst)
+            .map_err(|_| CustomError::AccountWriteFailed)?;
         
         Ok(())
     }
@@ -554,16 +643,14 @@ pub struct SetOwner<'info> {
 /// Accounts required for migrating domain separator
 #[derive(Accounts)]
 pub struct MigrateDomainSeparator<'info> {
-    /// The relay depository account to update with reallocation
+    /// The relay depository account to migrate in-place
+    /// CHECK: This is the existing relay depository account to be migrated
     #[account(
         mut,
         seeds = [RELAY_DEPOSITORY_SEED],
-        bump,
-        realloc = 8 + RelayDepository::INIT_SPACE,
-        realloc::payer = owner,
-        realloc::zero = false
+        bump
     )]
-    pub relay_depository: Account<'info, RelayDepository>,
+    pub relay_depository: UncheckedAccount<'info>,
 
     /// The owner of the relay depository (also pays for reallocation)
     #[account(mut)]
@@ -571,6 +658,10 @@ pub struct MigrateDomainSeparator<'info> {
 
     /// System program for reallocation
     pub system_program: Program<'info, System>,
+
+    /// The instruction sysvar for reentrancy protection
+    /// CHECK: The instruction sysvar for reentrancy protection
+    pub ix_sysvar: AccountInfo<'info>,
 }
 
 /// Accounts required for depositing native currency
@@ -859,6 +950,30 @@ pub enum CustomError {
     /// Thrown when the vault address doesn't match the expected vault
     #[msg("Invalid vault address")]
     InvalidVaultAddress,
+
+    /// Thrown when the account data write fails
+    #[msg("Failed to write account data")]
+    AccountWriteFailed,
+
+    /// Thrown when the relay depository PDA is invalid
+    #[msg("Invalid RelayDepository PDA")]
+    InvalidRelayDepositoryPDA,
+
+    /// Thrown when the account data is malformed
+    #[msg("Malformed account data")]
+    MalformedAccount,
+
+    /// Thrown when the account discriminator is invalid
+    #[msg("Invalid account discriminator")]
+    InvalidAccountDiscriminator,
+
+    /// Thrown when reentrancy is detected
+    #[msg("Reentrancy detected")]
+    ReentrancyDetected,
+
+    /// Thrown when the account size doesn't match expected legacy size
+    #[msg("Invalid account size for migration")]
+    InvalidAccountSize,
 }
 
 //----------------------------------------
