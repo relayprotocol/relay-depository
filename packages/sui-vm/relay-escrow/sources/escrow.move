@@ -15,6 +15,7 @@ module relay_escrow::escrow {
     const EExpired: u64 = 3;
     const ERequestExecuted: u64 = 4;
     const EInvalidPublicKey: u64 = 5;
+    const EInvalidChainId: u64 = 6;
 
     // Transfer request structure
     public struct TransferRequest has copy, drop {
@@ -22,7 +23,8 @@ module relay_escrow::escrow {
         amount: u64,          // Amount to transfer
         coin_type: TypeName,  // Type of coin to transfer
         nonce: u64,           // Unique nonce
-        expiration: u64       // Expiration timestamp
+        expiration: u64,      // Expiration timestamp
+        chain_id: vector<u8>  // Chain identifier to prevent replay attacks
     }
 
     // Stores executed request hashes
@@ -41,6 +43,7 @@ module relay_escrow::escrow {
         id: UID,
         allocator: address,
         allocator_pubkey: vector<u8>,
+        chain_id: vector<u8>,
     }
 
     public struct AllocatorInfo has copy, drop {
@@ -78,6 +81,7 @@ module relay_escrow::escrow {
             id: object::new(ctx),
             allocator: sender,
             allocator_pubkey: vector[],
+            chain_id: vector[],
         };
         
         // Create and transfer AllocatorCap to the creator
@@ -205,6 +209,17 @@ module relay_escrow::escrow {
         });
     }
 
+    // Change chainId - only current allocator can do this
+    public entry fun set_chain_id(
+        escrow: &mut Escrow,
+        _cap: &AllocatorCap, 
+        chain_id: vector<u8>,
+        ctx: &mut TxContext
+    ) {
+        assert!(tx_context::sender(ctx) == escrow.allocator, ENotAllocator);
+        escrow.chain_id = chain_id;
+    }
+
     // Execute a transfer based on allocator's signature
     public entry fun execute_transfer<T>(
         escrow: &mut Escrow,
@@ -213,17 +228,25 @@ module relay_escrow::escrow {
         amount: u64,
         nonce: u64,
         expiration: u64,
+        chain_id: vector<u8>,
         signature: vector<u8>,
         clock: &Clock,
         ctx: &mut TxContext
     ) {
+        // Make sure chain_id is configured
+        assert!(vector::length(&escrow.chain_id) > 0, EInvalidChainId);
+
+        // Verify chain_id matches escrow's chain_id
+        assert!(chain_id == escrow.chain_id, EInvalidChainId);
+
         // Construct the transfer request
         let request = TransferRequest {
             recipient,
             amount,
             coin_type: type_name::get<T>(),
             nonce,
-            expiration
+            expiration,
+            chain_id
         };
 
         // Verify request hasn't expired
