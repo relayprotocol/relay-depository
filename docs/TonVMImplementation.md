@@ -39,6 +39,15 @@ gas_amount: Coins       // Gas for processing
 signature: bits512      // Ed25519 signature by allocator
 ```
 
+**Domain Separator**:
+The contract uses a domain separator pattern (similar to EIP-712) to prevent cross-chain and cross-contract replay attacks. The signed message includes:
+- Protocol name (`"RelayEscrow"`)
+- Contract address (`my_address()` - prevents cross-contract replay)
+- Chain ID (stored in contract state - prevents cross-chain replay)
+- Transfer parameters
+
+This ensures signatures are only valid for the specific protocol, contract deployment, and chain.
+
 ## Security Features
 
 ### Ed25519 Signature Verification
@@ -47,6 +56,7 @@ signature: bits512      // Ed25519 signature by allocator
 - Maintains strict nonce progression for replay protection
 
 ### Protection Mechanisms
+- **Domain Separator**: Contract address and chain ID prevent cross-chain/cross-contract replay attacks
 - **Replay Protection**: Strict nonce ordering with incremental validation
 - **Time-based Expiration**: Transfers expire after specified timestamp
 - **Balance Checks**: Validates sufficient TON balance before transfers
@@ -76,6 +86,7 @@ msg_hash: uint256 // Hash of the signed message
 - `get_owner()`: Returns owner address
 - `get_allocator()`: Returns allocator address
 - `get_nonce()`: Returns current nonce value
+- `get_chain_id()`: Returns chain ID (-1 for mainnet, -3 for testnet)
 
 ### Token Support
 - Native TON coins
