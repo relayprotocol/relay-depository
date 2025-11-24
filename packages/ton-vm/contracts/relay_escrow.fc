@@ -1,7 +1,7 @@
 #include "imports/stdlib.fc";
 
 ;; Constants for signature verification
-const int SIGNATURE_LENGTH = 512;  
+const int SIGNATURE_LENGTH = 512;
 const int PUBLIC_KEY_LENGTH = 256;
 
 const op::set_allocator = "op::set_allocator"c;
@@ -91,7 +91,9 @@ const int error::empty_actions = 107;
     slice sig = sig_slice~load_bits(SIGNATURE_LENGTH);
 
     ;; Recreate message for signature verification with domain separator
+    ;; Domain separator includes: protocol name, contract address, chain ID
     cell signing_message = begin_cell()
+        .store_slice("52656c6179457363726f77"s)  ;; "RelayEscrow" in hex
         .store_slice(my_address())
         .store_int(chain_id, 32)
         .store_uint(msg_nonce, 64)

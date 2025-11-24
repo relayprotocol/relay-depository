@@ -3,6 +3,7 @@ import { sign } from '@ton/crypto';
 import { JettonWallet } from "@ton-community/assets-sdk";
 
 export const ADDRESS_NONE = Address.parse('EQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAM9c');
+export const PROTOCOL_NAME = Buffer.from('RelayEscrow', 'ascii');
 
 export type RelayEscrowConfig = {
     owner: Address;
@@ -203,7 +204,9 @@ export class RelayEscrow implements Contract {
             .endCell();
 
         // Create signing message with domain separator
+        // Domain separator includes: protocol name, contract address, chain ID
         return beginCell()
+            .storeBuffer(PROTOCOL_NAME)
             .storeAddress(this.address)
             .storeInt(chainId, 32)
             .storeUint(request.nonce, 64)
