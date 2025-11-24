@@ -8,6 +8,7 @@ export type RelayEscrowConfig = {
     owner: Address;
     allocator: Address;
     nonce: bigint;
+    chainId: number;
 };
 
 // Currency types
@@ -59,6 +60,7 @@ export function relayEscrowConfigToCell(config: RelayEscrowConfig): Cell {
     .storeAddress(config.owner)
     .storeAddress(config.allocator)
     .storeUint(config.nonce, 64)
+    .storeInt(config.chainId, 32)
     .endCell();
 }
 
@@ -102,6 +104,11 @@ export class RelayEscrow implements Contract {
     async getNonce(provider: ContractProvider) {
         const result = await provider.get('get_nonce', []);
         return result.stack.readBigNumber();
+    }
+
+    async getChainId(provider: ContractProvider) {
+        const result = await provider.get('get_chain_id', []);
+        return result.stack.readNumber();
     }
 
     async getCurrentBalance(provider: ContractProvider) {
@@ -177,19 +184,33 @@ export class RelayEscrow implements Contract {
         });
     }
 
-    // Create message cell for signing
-    private createSigningMessage(request: TransferRequestData): Cell {
-        // Create the same data structure that will be used in the transfer
-        return beginCell()
-            .storeUint(request.nonce, 64)
-            .storeUint(request.expiry, 32)
-            .storeUint(request.currencyType, 8)
+    // Create message cell for signing (must match FunC contract structure)
+    private createSigningMessage(request: TransferRequestData, chainId: number): Cell {
+        // Split addresses into reference cell
+        const addrData = beginCell()
             .storeAddress(request.to)
-            .storeAddress(request.jettonWallet)
+            .storeAddress(request.currencyType === CurrencyType.TON
+                ? ADDRESS_NONE
+                : request.jettonWallet)
             .storeAddress(request.currency)
+            .endCell();
+
+        // Split amounts into reference cell
+        const amountData = beginCell()
             .storeCoins(request.amount)
             .storeCoins(request.forwardAmount)
             .storeCoins(request.gasAmount)
+            .endCell();
+
+        // Create signing message with domain separator
+        return beginCell()
+            .storeAddress(this.address)
+            .storeInt(chainId, 32)
+            .storeUint(request.nonce, 64)
+            .storeUint(request.expiry, 32)
+            .storeUint(request.currencyType, 8)
+            .storeRef(addrData)
+            .storeRef(amountData)
             .endCell();
     }
 
@@ -197,28 +218,37 @@ export class RelayEscrow implements Contract {
         const signatureCell = beginCell()
             .storeBuffer(request.signature)
             .endCell();
-    
+
+        // Split addresses into reference cell
+        const addrCell = beginCell()
+            .storeAddress(request.to)
+            .storeAddress(request.currencyType === CurrencyType.TON
+                ? ADDRESS_NONE
+                : request.jettonWallet)
+            .storeAddress(request.currency)
+            .endCell();
+
+        // Split amounts into reference cell
+        const amountCell = beginCell()
+            .storeCoins(request.amount)
+            .storeCoins(request.forwardAmount)
+            .storeCoins(request.gasAmount)
+            .endCell();
+
         const mainCell = beginCell()
             .storeUint(request.nonce, 64)
             .storeUint(request.expiry, 32)
             .storeUint(request.currencyType, 8)
-            .storeAddress(request.to)
-            .storeAddress(request.currencyType === CurrencyType.TON 
-                ? ADDRESS_NONE
-                : request.jettonWallet)
-            .storeAddress(request.currency)
-            .storeCoins(request.amount)
-            .storeCoins(request.forwardAmount)
-            .storeCoins(request.gasAmount);
+            .storeRef(addrCell)
+            .storeRef(amountCell)
+            .storeRef(signatureCell);
 
-        return mainCell
-            .storeRef(signatureCell)
-            .endCell();
+        return mainCell.endCell();
     }
 
    // Generate signature for transfer request
-    async signTransfer(request: TransferRequestData, secretKey: Buffer): Promise<Buffer> {
-        const message = this.createSigningMessage(request);
+    async signTransfer(request: TransferRequestData, secretKey: Buffer, chainId: number): Promise<Buffer> {
+        const message = this.createSigningMessage(request, chainId);
         const hash = message.hash();
         return Buffer.from(sign(hash, secretKey));
     }
@@ -244,8 +274,9 @@ export class RelayEscrow implements Contract {
             throw new Error('Currency address is required for Jetton transfers');
         }
 
-        // Get current nonce
+        // Get current nonce and chain ID
         const currentNonce = await this.getNonce(provider);
+        const chainId = await this.getChainId(provider);
         const newNonce = opts.nonce ? opts.nonce : BigInt(currentNonce + 1n);
 
         // Create request data
@@ -262,7 +293,7 @@ export class RelayEscrow implements Contract {
         };
 
         // Generate signature
-        const signature = await this.signTransfer(requestData, secretKey);
+        const signature = await this.signTransfer(requestData, secretKey, chainId);
 
         // Return complete transfer request
         return {

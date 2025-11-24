@@ -20,6 +20,7 @@ const int CURRENCY_JETTON = 1;
 global slice owner;
 global slice allocator;
 global int nonce;
+global int chain_id;
 
 ;; Errors
 const int error::not_owner = 101;
@@ -51,6 +52,7 @@ const int error::empty_actions = 107;
     owner = ds~load_msg_addr(); ;; owner
     allocator = ds~load_msg_addr(); ;; allocator
     nonce = ds~load_uint(64); ;; nonce
+    chain_id = ds~load_int(32); ;; chain_id
 
     ds.end_parse();
 }
@@ -62,44 +64,43 @@ const int error::empty_actions = 107;
             .store_slice(owner)
             .store_slice(allocator)
             .store_uint(nonce, 64)
+            .store_int(chain_id, 32)
             .end_cell()
     );
 }
 
-;; Check Transafer signature
+;; Check Transfer signature
 (int, int) check_transfer_signature(slice signature, cell msg_body) {
     ;; Parse main data slice
     slice ds = msg_body.begin_parse();
-    
+
     ;; Load main transfer data
     int msg_nonce = ds~load_uint(64);
     int expiry = ds~load_uint(32);
     int currency_type = ds~load_uint(8);
-    slice to_addr = ds~load_msg_addr();
-    slice jetton_addr = ds~load_msg_addr();
-    slice currency_addr = ds~load_msg_addr();
-    int amount = ds~load_coins();
-    int forward_amount = ds~load_coins();
-    int gas_amount = ds~load_coins();
-    
+
+    ;; Load address data from reference cell
+    cell addr_cell = ds~load_ref();
+
+    ;; Load amount data from reference cell
+    cell amount_cell = ds~load_ref();
+
     ;; Load signature from reference cell
     cell sig_cell = ds~load_ref();
     slice sig_slice = sig_cell.begin_parse();
     slice sig = sig_slice~load_bits(SIGNATURE_LENGTH);
-    
-    ;; Recreate message for signature verification
+
+    ;; Recreate message for signature verification with domain separator
     cell signing_message = begin_cell()
+        .store_slice(my_address())
+        .store_int(chain_id, 32)
         .store_uint(msg_nonce, 64)
         .store_uint(expiry, 32)
         .store_uint(currency_type, 8)
-        .store_slice(to_addr)
-        .store_slice(jetton_addr)
-        .store_slice(currency_addr)
-        .store_coins(amount)
-        .store_coins(forward_amount)
-        .store_coins(gas_amount)
+        .store_ref(addr_cell)
+        .store_ref(amount_cell)
         .end_cell();
-    
+
     (int wc, int pk_hash) = parse_std_addr(allocator);
     int msg_hash = cell_hash(signing_message);
     return (
@@ -158,19 +159,27 @@ const int error::empty_actions = 107;
 
 () process_transfer(cell transfer_data, int my_balance) impure {
     slice ds = transfer_data.begin_parse();
-    
+
     ;; Get main data
     int msg_nonce = ds~load_uint(64);
     int expiry = ds~load_uint(32);
     int currency_type = ds~load_uint(8);
-    slice to = ds~load_msg_addr();
-    slice my_jetton_wallet = ds~load_msg_addr();
-    slice currency = ds~load_msg_addr();
-    int amount = ds~load_coins();
-    int forward_amount = ds~load_coins();
-    int gas_amount = ds~load_coins();
 
-    ;; Load signature from ref
+    ;; Load address data from reference cell
+    cell addr_cell = ds~load_ref();
+    slice addr_slice = addr_cell.begin_parse();
+    slice to = addr_slice~load_msg_addr();
+    slice my_jetton_wallet = addr_slice~load_msg_addr();
+    slice currency = addr_slice~load_msg_addr();
+
+    ;; Load amount data from reference cell
+    cell amount_cell = ds~load_ref();
+    slice amount_slice = amount_cell.begin_parse();
+    int amount = amount_slice~load_coins();
+    int forward_amount = amount_slice~load_coins();
+    int gas_amount = amount_slice~load_coins();
+
+    ;; Load signature from reference cell
     cell sig_cell = ds~load_ref();
     slice signature = sig_cell.begin_parse();
     (int msg_hash, int check_result) = check_transfer_signature(signature, transfer_data);
@@ -204,7 +213,7 @@ const int error::empty_actions = 107;
         .store_coins(amount)        ;; Amount
         .store_uint(msg_hash, 256)
         .end_cell();
-    
+
     send_log_message(event_data.begin_parse());
 }
 
@@ -331,4 +340,9 @@ slice get_allocator() method_id {
 int get_nonce() method_id {
     load_data();
     return nonce;
+}
+
+int get_chain_id() method_id {
+    load_data();
+    return chain_id;
 }
