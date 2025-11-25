@@ -86,7 +86,7 @@ msg_hash: uint256 // Hash of the signed message
 - `get_owner()`: Returns owner address
 - `get_allocator()`: Returns allocator address
 - `get_nonce()`: Returns current nonce value
-- `get_chain_id()`: Returns chain ID (-1 for mainnet, -3 for testnet)
+- `get_chain_id()`: Returns chain ID
 
 ### Token Support
 - Native TON coins
