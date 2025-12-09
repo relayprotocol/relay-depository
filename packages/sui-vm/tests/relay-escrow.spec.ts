@@ -10,6 +10,10 @@ import fs from "fs";
 import path from "path";
 import { Buffer } from 'buffer';
 import { sha256 } from 'js-sha256';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const AllocatorInfoStruct = bcs.struct('AllocatorInfo', {
     addr: bcs.Address,
@@ -23,7 +27,8 @@ const TransferRequestStruct = bcs.struct('TransferRequest', {
         name: bcs.string(),
     }),
     nonce: bcs.u64(),
-    expiration: bcs.u64()
+    expiration: bcs.u64(),
+    chain_id: bcs.vector(bcs.u8())
 });
 
 const compiledModuleUsdc = {
@@ -58,7 +63,8 @@ describe('Relay Escrow', () => {
     let USDC_TREASURYCAP_ID: string;
 
     const DEPOSIT_AMOUNT = 1000n; 
-    const WITHDRAW_AMOUNT = 500n; 
+    const WITHDRAW_AMOUNT = 500n;
+    const CHAIN_ID = 'localnet'; 
 
     before(async () => {
         deployer = new Ed25519Keypair();
@@ -73,7 +79,7 @@ describe('Relay Escrow', () => {
             allocator.toSuiAddress(),
         ].map((recipient) => requestSuiFromFaucetV0({ host: getFaucetHost(networkType), recipient })));
 
-        const packageData = await publishPackage(__dirname + '/../relay-escrow');
+        const packageData = await publishPackage(__dirname + '/../relay-escrow', CHAIN_ID);
         PACKAGE_ID = packageData.packageId;
         ESCROW_ID = packageData.escrowId;
         ALLOCATOR_CAP_ID = packageData.allocatorCapId;
@@ -82,6 +88,9 @@ describe('Relay Escrow', () => {
         USDC_PACKAGE_ID = coinData.packageId;
         USDC_COIN_TYPE = coinData.coinType;
         USDC_TREASURYCAP_ID = coinData.treasuryCapId;
+
+        // Set chainId
+        await configChainId(CHAIN_ID);
     });
 
     it('should set new allocator successfully', async () => {
@@ -301,7 +310,8 @@ describe('Relay Escrow', () => {
                     name: normalizeType('0x2::sui::SUI')
                 },
                 nonce: nonce,
-                expiration: BigInt(expiration)
+                expiration: BigInt(expiration),
+                chain_id: Buffer.from(CHAIN_ID, 'utf8')
             };
     
             // Serialize the request
@@ -327,6 +337,7 @@ describe('Relay Escrow', () => {
                     tx.pure.u64(amount),
                     tx.pure.u64(nonce),
                     tx.pure.u64(expiration),
+                    tx.pure.vector("u8", Buffer.from(CHAIN_ID, 'utf8')),
                     tx.pure.vector("u8", signature),
                     tx.object('0x6'), // SUI_CLOCK_OBJECT_ID
                 ]
@@ -388,7 +399,8 @@ describe('Relay Escrow', () => {
                     name: normalizeType(USDC_COIN_TYPE)
                 },
                 nonce: nonce,
-                expiration: BigInt(expiration)
+                expiration: BigInt(expiration),
+                chain_id: Buffer.from(CHAIN_ID, 'utf8')
             };
     
             // Serialize the request
@@ -417,6 +429,7 @@ describe('Relay Escrow', () => {
                     tx.pure.u64(amount),
                     tx.pure.u64(nonce),
                     tx.pure.u64(expiration),
+                    tx.pure.vector("u8", Buffer.from(CHAIN_ID, 'utf8')),
                     tx.pure.vector("u8", signature),
                     tx.object('0x6'), // SUI_CLOCK_OBJECT_ID
                 ]
@@ -539,7 +552,8 @@ describe('Relay Escrow', () => {
                         name: normalizeType('0x2::sui::SUI')
                     },
                     nonce: transfer.nonce,
-                    expiration: transfer.expiration
+                    expiration: transfer.expiration,
+                    chain_id: Buffer.from(CHAIN_ID, 'utf8')
                 };
     
                 // Serialize and sign the request
@@ -584,6 +598,7 @@ describe('Relay Escrow', () => {
                         tx.pure.u64(request.amount),
                         tx.pure.u64(request.nonce),
                         tx.pure.u64(request.expiration),
+                        tx.pure.vector("u8", Buffer.from(CHAIN_ID, 'utf8')),
                         tx.pure.vector("u8", signature),
                         tx.object('0x6'), // SUI_CLOCK_OBJECT_ID
                     ]
@@ -636,6 +651,7 @@ describe('Relay Escrow', () => {
                     retryTx.pure.u64(request.amount),
                     retryTx.pure.u64(request.nonce),
                     retryTx.pure.u64(request.expiration),
+                    retryTx.pure.vector("u8", Buffer.from(CHAIN_ID, 'utf8')),
                     retryTx.pure.vector("u8", signature),
                     retryTx.object('0x6'), // SUI_CLOCK_OBJECT_ID
                 ]
@@ -680,7 +696,8 @@ describe('Relay Escrow', () => {
                     name: normalizeType('0x2::sui::SUI')
                 },
                 nonce: nonce,
-                expiration: BigInt(expiration)
+                expiration: BigInt(expiration),
+                chain_id: Buffer.from(CHAIN_ID, 'utf8')
             };
     
             // Serialize and sign the request
@@ -702,6 +719,7 @@ describe('Relay Escrow', () => {
                     tx.pure.u64(amount),
                     tx.pure.u64(nonce),
                     tx.pure.u64(expiration),
+                    tx.pure.vector("u8", Buffer.from(CHAIN_ID, 'utf8')),
                     tx.pure.vector("u8", signature),
                     tx.object('0x6'), // SUI_CLOCK_OBJECT_ID
                 ]
@@ -745,7 +763,8 @@ describe('Relay Escrow', () => {
                     name: normalizeType('0x2::sui::SUI')
                 },
                 nonce: nonce,
-                expiration: BigInt(expiration)
+                expiration: BigInt(expiration),
+                chain_id: Buffer.from(CHAIN_ID, 'utf8')
             };
     
             // Serialize the request
@@ -847,6 +866,74 @@ describe('Relay Escrow', () => {
             expect(error).to.exist;
         }
     });
+
+    it('should fail when using wrong chain_id (cross-chain replay attack protection)', async () => {
+        try {
+            // Ensure there are funds in escrow
+            const escrowBalance = await getBalance('0x2::sui::SUI');
+            expect(escrowBalance > 0n).to.be.true;
+    
+            const expiration = Date.now() + 10 * 60 * 1000;
+            
+            // Create transfer request parameters
+            const recipient = bob.toSuiAddress();
+            const amount = WITHDRAW_AMOUNT;
+            const nonce = BigInt(Date.now());
+            const wrongChainId = 'mainnet'; // Different from testnet
+    
+            // Create transfer request object with wrong chain_id
+            const transferRequest = {
+                recipient: recipient,
+                amount: amount,
+                coin_type: {
+                    name: normalizeType('0x2::sui::SUI')
+                },
+                nonce: nonce,
+                expiration: BigInt(expiration),
+                chain_id: Buffer.from(wrongChainId, 'utf8')
+            };
+    
+            // Serialize and sign the request
+            const serializedData = TransferRequestStruct.serialize(transferRequest).toBytes();
+            const hashData = sha256.create();
+            hashData.update(serializedData);
+            const messageHash = new Uint8Array(hashData.array());
+            const signature = await allocator.sign(messageHash);
+    
+            // Try to execute transfer with wrong chain_id
+            const tx = new Transaction();
+            tx.moveCall({
+                target: `${PACKAGE_ID}::escrow::execute_transfer`,
+                typeArguments: ['0x2::sui::SUI'],
+                arguments: [
+                    tx.object(ESCROW_ID),
+                    tx.object(EXECUTED_REQUESTS_ID),
+                    tx.pure.address(recipient),
+                    tx.pure.u64(amount),
+                    tx.pure.u64(nonce),
+                    tx.pure.u64(expiration),
+                    tx.pure.vector("u8", Buffer.from(wrongChainId, 'utf8')), // Wrong chain_id
+                    tx.pure.vector("u8", signature),
+                    tx.object('0x6'), // SUI_CLOCK_OBJECT_ID
+                ]
+            });
+            tx.setGasBudget(100000000);
+    
+            const response = await client.signAndExecuteTransaction({
+                signer: alice,
+                transaction: tx,
+                requestType: 'WaitForLocalExecution',
+                options: { showEffects: true }
+            });
+    
+            // Should fail due to wrong chain_id
+            expect(response.effects?.status.status).to.equal('failure');
+    
+        } catch (error) {
+            // Expected to fail
+            expect(error).to.exist;
+        }
+    });
         
     async function getCoinBalance(address: string, coinType: string): Promise<bigint> {
         const coin = await client.getBalance({
@@ -884,7 +971,7 @@ describe('Relay Escrow', () => {
         }
     }
 
-    async function deployPackage(packageData: any) {
+    async function deployPackage(packageData: any, chainId: string) {
         const tx = new Transaction();
         const [upgradeCap] = tx.publish({
             modules: packageData.modules,
@@ -926,7 +1013,7 @@ describe('Relay Escrow', () => {
         return objects;
     }
 
-    async function publishPackage(packagePath: string) {
+    async function publishPackage(packagePath: string, chainId: string) {
         const cacheFile = `${packagePath}/.build_cache.json`;
         const getLastModified = (dir: string): number => {
             let lastModified = 0;
@@ -974,12 +1061,12 @@ describe('Relay Escrow', () => {
             }));
         }
     
-        const objects = await deployPackage(buildResult);
+        const objects = await deployPackage(buildResult, chainId);
         const packageId = objects.find(c => c.type === "package").id!;
         const escrowId = objects.find(c => c.type === "escrow::Escrow").id!;
         const allocatorCapId = objects.find(c => c.type === "escrow::AllocatorCap").id!;
         const executedRequestId = objects.find(c => c.type === "escrow::ExecutedRequests").id!;
-    
+
         return {
             packageId,
             escrowId,
@@ -989,7 +1076,7 @@ describe('Relay Escrow', () => {
     }
 
     async function deployCoin() {
-        const objects = await deployPackage(compiledModuleUsdc);
+        const objects = await deployPackage(compiledModuleUsdc, 'coin');
         const packageId = objects.find(c => c.type === "package").id!;
         const treasuryCapId = objects.find(c => c.typeRaw.includes('coin::TreasuryCap')).id!;
         return {
@@ -997,6 +1084,25 @@ describe('Relay Escrow', () => {
             treasuryCapId,
             coinType: `${packageId}::usdc::USDC`
         }
+    }
+
+    async function configChainId(chainId: string) {
+        const tx = new Transaction();
+        tx.moveCall({
+            target: `${PACKAGE_ID}::escrow::set_chain_id`,
+            arguments: [
+                tx.object(ESCROW_ID),
+                tx.object(ALLOCATOR_CAP_ID),
+                tx.pure.vector("u8", Buffer.from(chainId, 'utf8')),
+            ]
+        });
+        tx.setGasBudget(100000000);
+        await client.signAndExecuteTransaction({
+            signer: deployer,
+            transaction: tx,
+            requestType: 'WaitForLocalExecution',
+            options: { showEffects: true, showEvents: true }
+        });
     }
 
     function normalizeType(type) {
