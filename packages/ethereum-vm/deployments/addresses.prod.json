@@ -175,7 +175,7 @@
     "compilerVersion": "0.8.28",
     "evmVersion": "cancun",
     "explorerUrl": "https://stablescan.xyz",
-    "verificationFlags": "--chain 988",
+    "verificationFlags": "--chain 988 --verifier etherscan",
     "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
@@ -703,6 +703,16 @@
     "evmVersion": "cancun",
     "explorerUrl": "https://explorer.forma.art",
     "verificationFlags": "--chain 984122 --verifier blockscout --verifier-url https://explorer.forma.art/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "ethereal",
+    "chainId": 5064014,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.forma.art",
+    "verificationFlags": "--chain 5064014 --verifier blockscout --verifier-url https://explorer.ethereal.trade/api",
     "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
