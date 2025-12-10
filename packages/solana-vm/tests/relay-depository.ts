@@ -219,7 +219,7 @@ describe("Relay Depository", () => {
 
   const domainSeparator = createDomainSeparator(
     "RelayDepository",
-    "1", 
+    "1",
     "solana-mainnet",
     program.programId
   );
@@ -289,7 +289,7 @@ describe("Relay Depository", () => {
     assert.ok(relayDepositoryAccount.owner.equals(owner.publicKey));
     assert.ok(relayDepositoryAccount.allocator.equals(allocator.publicKey));
     assert.equal(relayDepositoryAccount.vaultBump, vaultBump);
-    assert.deepEqual(new Uint8Array(relayDepositoryAccount.domainSeparator), new Uint8Array(domainSeparator));
+    assert.deepEqual(new Uint8Array(relayDepositoryAccount.domainSeparator), domainSeparator);
   });
 
   it("Owner can set new allocator", async () => {
@@ -1629,37 +1629,78 @@ describe("Relay Depository", () => {
     }
   });
 
-  it("Should fail execute transfer with invalid vault address", async () => {
-    const transferAmount = LAMPORTS_PER_SOL / 10; // 0.1 SOL
-    const wrongVault = Keypair.generate().publicKey; // Generate a wrong vault address
+  it("Should fail cross-chain replay attack with domain separator", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 10;
+    const sharedNonce = new anchor.BN(Date.now() + Math.floor(Math.random() * 1000));
+    const sharedExpiration = new anchor.BN(Math.floor(Date.now() / 1000) + 300);
 
-    // Create transfer request with wrong vault address
-    const domain = createDomainSeparator(
+    const mainnetRequest = createTransferRequest(
+      recipient.publicKey,
+      null,
+      new anchor.BN(transferAmount),
+      sharedNonce,
+      sharedExpiration
+    );
+
+    const testnetDomainSeparator = createDomainSeparator(
       "RelayDepository",
       "1",
-      "solana-mainnet",
+      "solana-testnet",
       program.programId
     );
 
-    const request = {
-      domain: Array.from(domain),
+    const testnetRequest = {
+      domain: Array.from(testnetDomainSeparator),
       recipient: recipient.publicKey,
-      token: null, // SOL transfer
+      token: null,
       amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-      vaultAddress: wrongVault, // Use wrong vault address
+      nonce: sharedNonce,
+      expiration: sharedExpiration,
+      vaultAddress: vaultPDA,
     };
 
-    const messagHash = hashRequest(request);
+    const mainnetMessageHash = hashRequest(mainnetRequest);
+    const mainnetSignature = nacl.sign.detached(mainnetMessageHash, allocator.secretKey);
 
-    // Sign with allocator
-    const signature = nacl.sign.detached(messagHash, allocator.secretKey);
-    const requestPDA = await getUsedRequestPDA(request);
+    const testnetMessageHash = hashRequest(testnetRequest);
+    const testnetSignature = nacl.sign.detached(testnetMessageHash, allocator.secretKey);
 
+    const mainnetRequestPDA = await getUsedRequestPDA(mainnetRequest);
+    const testnetRequestPDA = await getUsedRequestPDA(testnetRequest);
+
+    // First execution with correct domain separator
+    await program.methods
+      .executeTransfer(mainnetRequest)
+      .accountsPartial({
+        mint: null,
+        vaultTokenAccount: null,
+        recipientTokenAccount: null,
+        relayDepository: relayDepositoryPDA,
+        executor: provider.wallet.publicKey,
+        recipient: recipient.publicKey,
+        vault: vaultPDA,
+        usedRequest: mainnetRequestPDA,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .preInstructions([
+        anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+          publicKey: allocator.publicKey.toBytes(),
+          message: mainnetMessageHash,
+          signature: mainnetSignature,
+        }),
+      ])
+      .rpc();
+
+    const mainnetUsedRequestState = await program.account.usedRequest.fetch(mainnetRequestPDA);
+    assert.equal(mainnetUsedRequestState.isUsed, true);
+
+    // Second execution should fail with wrong domain separator
     try {
       await program.methods
-        .executeTransfer(request)
+        .executeTransfer(testnetRequest)
         .accountsPartial({
           mint: null,
           vaultTokenAccount: null,
@@ -1668,7 +1709,7 @@ describe("Relay Depository", () => {
           executor: provider.wallet.publicKey,
           recipient: recipient.publicKey,
           vault: vaultPDA, // Use correct vault in accounts but wrong vault in request
-          usedRequest: requestPDA,
+          usedRequest: testnetRequestPDA,
           tokenProgram: TOKEN_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -1677,19 +1718,18 @@ describe("Relay Depository", () => {
         .preInstructions([
           anchor.web3.Ed25519Program.createInstructionWithPublicKey({
             publicKey: allocator.publicKey.toBytes(),
-            message: messagHash,
-            signature: signature,
+            message: testnetMessageHash,
+            signature: testnetSignature,
           }),
         ])
         .rpc();
 
-      assert.fail("Should have failed with invalid vault address");
+      assert.fail("Should have failed with invalid domain separator");
     } catch (err) {
-      assert.include(err.message, "InvalidVaultAddress");
-
-      // Verify request was not marked as used
+      assert.include(err.message, "InvalidDomainSeparator");
+      
       try {
-        await program.account.usedRequest.fetch(requestPDA);
+        await program.account.usedRequest.fetch(testnetRequestPDA);
         assert.fail("Request should not exist");
       } catch (e) {
         assert.include(e.message, "Account does not exist");
