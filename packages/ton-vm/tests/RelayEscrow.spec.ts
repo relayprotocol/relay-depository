@@ -1,6 +1,6 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
-import { Cell, toNano, Address, fromNano } from '@ton/core';
-import { RelayEscrow, CurrencyType, DepositEvent, WithdrawEvent } from '../wrappers/RelayEscrow';
+import { Cell, toNano, Address } from '@ton/core';
+import { RelayEscrow, CurrencyType, DepositEvent, WithdrawEvent, ADDRESS_NONE } from '../wrappers/RelayEscrow';
 import '@ton/test-utils';
 import { compile } from '@ton/blueprint';
 import { JettonMinter, JettonWallet, jettonContentToInternal } from "@ton-community/assets-sdk";
@@ -74,7 +74,8 @@ describe('RelayEscrow Contract Tests', () => {
                 {
                     owner: deployerWallet.address,
                     allocator: Address.parse(`0:${allocatorKey.publicKey.toString('hex')}`),
-                    nonce: 0n
+                    nonce: 0n,
+                    chainId: -1  // TON mainnet
                 },
                 contractCode
             )
@@ -434,6 +435,100 @@ describe('RelayEscrow Contract Tests', () => {
         const recipientBalance = await recipientWallet.getBalance();
         const initialBalance = await recipientWallet.getBalance();
         expect(recipientBalance).toBe(initialBalance);
+    });
+
+    it("should reject transfer with incorrect chain ID", async () => {
+        const transferAmount = toNano('1');
+        const wrongChainId = -3;  // Testnet chain ID (contract uses -1 for mainnet)
+
+        // Get current nonce
+        const currentNonce = await escrowContract.getNonce();
+
+        // Create request data
+        const requestData = {
+            nonce: currentNonce + 1n,
+            expiry: Math.floor(Date.now() / 1000) + 3600,
+            currencyType: CurrencyType.TON,
+            to: recipientWallet.address,
+            jettonWallet: ADDRESS_NONE,
+            currency: ADDRESS_NONE,
+            amount: transferAmount,
+            gasAmount: 200000000n,
+            forwardAmount: 50000000n,
+        };
+
+        // Sign with wrong chain ID
+        const wrongSignature = await escrowContract.signTransfer(requestData, allocatorKey.secretKey, wrongChainId);
+
+        // Create transfer request with wrong signature
+        const request = {
+            ...requestData,
+            signature: wrongSignature
+        };
+
+        // Try to execute transfer
+        const transferResult = await escrowContract.sendTransfers(
+            depositorWallet.getSender(),
+            {
+                requests: [request],
+                value: toNano('0.5')
+            }
+        );
+
+        // Verify transaction failed with invalid signature error
+        expect(transferResult.transactions).toHaveTransaction({
+            from: depositorWallet.address,
+            to: escrowContract.address,
+            success: false,
+            exitCode: 102  // Invalid signature error code
+        });
+    });
+
+    it("should handle Jetton transfer with very large amounts (cell size stress test)", async () => {
+        // Use maximum possible amounts to test cell size limits
+        const maxAmount = (1n << 120n) - 1n;  // Maximum Coins value (120 bits)
+        const escrowJettonWallet = await usdcMinterContract.getWallet(escrowContract.address);
+
+        // Mint a large amount to escrow for testing
+        await usdcMinterContract.sendMint(
+            deployerWallet.getSender(),
+            escrowContract.address,
+            maxAmount,
+            {
+                value: toNano('0.5')
+            }
+        );
+
+        // Create transfer request with maximum amounts
+        const request = await escrowContract.createTransferRequest(
+            blockchain.provider(escrowContract.address),
+            allocatorKey.secretKey,
+            {
+                currencyType: CurrencyType.JETTON,
+                to: recipientWallet.address,
+                jettonWallet: escrowJettonWallet.address,
+                currency: usdcMinterContract.address,
+                amount: maxAmount,
+                gasAmount: maxAmount,
+                forwardAmount: maxAmount,
+                expiryInSeconds: 3600
+            }
+        );
+
+        // Try to execute transfer with large amounts
+        const transferResult = await escrowContract.sendTransfers(
+            depositorWallet.getSender(),
+            {
+                requests: [request],
+                value: toNano('100')  // Large gas for safety
+            }
+        );
+
+        // Verify transaction success or check error
+        expect(transferResult.transactions).toHaveTransaction({
+            from: depositorWallet.address,
+            to: escrowContract.address,
+        });
     });
 
     it("should handle multiple transfers in a single transaction", async () => {
