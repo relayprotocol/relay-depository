@@ -24,6 +24,7 @@ import {
 import { assert } from "chai";
 import { sha256 } from "js-sha256";
 import nacl from "tweetnacl";
+import { createHash } from "crypto";
 
 import { RelayDepository } from "../target/types/relay_depository";
 
@@ -201,6 +202,28 @@ describe("Relay Depository", () => {
     );
   });
 
+  const createDomainSeparator = (
+    name: string,
+    version: string,
+    chainId: string,
+    verifyingContract: PublicKey
+  ): Uint8Array => {
+    const data = Buffer.concat([
+      Buffer.from(name),
+      Buffer.from(version),
+      Buffer.from(chainId),
+      verifyingContract.toBuffer(),
+    ]);
+    return new Uint8Array(sha256.array(data));
+  };
+
+  const domainSeparator = createDomainSeparator(
+    "RelayDepository",
+    "1",
+    "solana-mainnet",
+    program.programId
+  );
+
   const getEvents = async (signature: string) => {
     await provider.connection.confirmTransaction(signature);
 
@@ -229,7 +252,7 @@ describe("Relay Depository", () => {
   it("Initialize with none-owner should fail", async () => {
     try {
       await program.methods
-        .initialize()
+        .initialize("solana-mainnet")
         .accountsPartial({
           relayDepository: relayDepositoryPDA,
           vault: vaultPDA,
@@ -248,7 +271,7 @@ describe("Relay Depository", () => {
 
   it("Should successfully initialize with correct owner", async () => {
     await program.methods
-      .initialize()
+      .initialize("solana-mainnet")
       .accountsPartial({
         relayDepository: relayDepositoryPDA,
         vault: vaultPDA,
@@ -266,6 +289,7 @@ describe("Relay Depository", () => {
     assert.ok(relayDepositoryAccount.owner.equals(owner.publicKey));
     assert.ok(relayDepositoryAccount.allocator.equals(allocator.publicKey));
     assert.equal(relayDepositoryAccount.vaultBump, vaultBump);
+    assert.deepEqual(new Uint8Array(relayDepositoryAccount.domainSeparator), domainSeparator);
   });
 
   it("Owner can set new allocator", async () => {
@@ -819,13 +843,13 @@ describe("Relay Depository", () => {
   it("Should fail while execute native transfer over min rent with allocator signature", async () => {
     const transferAmount = LAMPORTS_PER_SOL; // 1 SOL
     // Create transfer request
-    const request = {
-      recipient: recipient.publicKey,
-      token: null, // SOL transfer
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request = createTransferRequest(
+      recipient.publicKey,
+      null, // SOL transfer
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
     const messagHash = hashRequest(request);
 
@@ -870,13 +894,13 @@ describe("Relay Depository", () => {
     const transferAmount = LAMPORTS_PER_SOL / 10; // 0.1 SOL
 
     // Create transfer request
-    const request = {
-      recipient: recipient.publicKey,
-      token: null, // SOL transfer
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request = createTransferRequest(
+      recipient.publicKey,
+      null, // SOL transfer
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
     const messagHash = hashRequest(request);
 
@@ -964,13 +988,13 @@ describe("Relay Depository", () => {
     const transferAmount = LAMPORTS_PER_SOL / 2; // 0.5 SOL
 
     // Create transfer request
-    const request = {
-      recipient: recipient.publicKey,
-      token: mintPubkey, // SOL transfer
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request = createTransferRequest(
+      recipient.publicKey,
+      mintPubkey, // Token transfer
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
     const messagHash = hashRequest(request);
 
@@ -1039,13 +1063,13 @@ describe("Relay Depository", () => {
   it("Execute token2022 transfer with allocator signature", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 2;
 
-    const request = {
-      recipient: recipient.publicKey,
-      token: mint2022Pubkey,
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request = createTransferRequest(
+      recipient.publicKey,
+      mint2022Pubkey,
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
     const messagePath = hashRequest(request);
     const signature = nacl.sign.detached(messagePath, allocator.secretKey);
@@ -1111,13 +1135,13 @@ describe("Relay Depository", () => {
     const transferAmount = LAMPORTS_PER_SOL / 2;
     const fakeAllocator = Keypair.generate();
 
-    const request = {
-      recipient: recipient.publicKey,
-      token: null,
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request = createTransferRequest(
+      recipient.publicKey,
+      null,
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
     const messagHash = hashRequest(request);
 
@@ -1164,13 +1188,13 @@ describe("Relay Depository", () => {
     const transferAmount = LAMPORTS_PER_SOL / 2;
     const fakeAllocator = Keypair.generate();
 
-    const request = {
-      recipient: recipient.publicKey,
-      token: null,
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request = createTransferRequest(
+      recipient.publicKey,
+      null,
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
     const messagHash = hashRequest(request);
 
@@ -1217,13 +1241,13 @@ describe("Relay Depository", () => {
   it("Should not allow double execution of same request", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 2;
 
-    const request = {
-      recipient: recipient.publicKey,
-      token: null,
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request = createTransferRequest(
+      recipient.publicKey,
+      null,
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
     const messagHash = hashRequest(request);
     const signature = nacl.sign.detached(messagHash, allocator.secretKey);
@@ -1292,13 +1316,13 @@ describe("Relay Depository", () => {
     const transferAmount = LAMPORTS_PER_SOL / 10; // 0.1 SOL
 
     // Create transfer request
-    const request = {
-      recipient: recipient.publicKey,
-      token: null, // SOL transfer
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request = createTransferRequest(
+      recipient.publicKey,
+      null, // SOL transfer
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
     const messagHash = hashRequest(request);
 
@@ -1350,13 +1374,13 @@ describe("Relay Depository", () => {
     const transferAmount = LAMPORTS_PER_SOL / 10;
 
     // Create transfer request with recipient A
-    const request = {
-      recipient: recipient.publicKey, // Use original recipient in request
-      token: mintPubkey,
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request = createTransferRequest(
+      recipient.publicKey, // Use original recipient in request
+      mintPubkey,
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
     const messagHash = hashRequest(request);
     const signature = nacl.sign.detached(messagHash, allocator.secretKey);
@@ -1963,21 +1987,21 @@ describe("Relay Depository", () => {
     const transferAmount = LAMPORTS_PER_SOL / 10; // 0.25 SOL each
 
     // Create two transfer requests
-    const request1 = {
-      recipient: recipient.publicKey,
-      token: null, // SOL transfer
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request1 = createTransferRequest(
+      recipient.publicKey,
+      null, // SOL transfer
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
-    const request2 = {
-      recipient: recipient.publicKey,
-      token: mintPubkey, // Token transfer
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request2 = createTransferRequest(
+      recipient.publicKey,
+      mintPubkey, // Token transfer
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
     // Encode messages and create signatures
     const message1Hash = hashRequest(request1);
@@ -2126,20 +2150,20 @@ describe("Relay Depository", () => {
     const transferAmount = LAMPORTS_PER_SOL / 10;
 
     // Create two transfer requests
-    const request1 = {
-      recipient: recipient.publicKey,
-      token: null,
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
-    const request2 = {
-      recipient: recipient.publicKey,
-      token: null,
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request1 = createTransferRequest(
+      recipient.publicKey,
+      null,
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
+    const request2 = createTransferRequest(
+      recipient.publicKey,
+      null,
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
     const message1Hash = hashRequest(request1);
     const message2Hash = hashRequest(request2);
@@ -2238,6 +2262,139 @@ describe("Relay Depository", () => {
       }
     }
   });
+
+  it("Should fail cross-chain replay attack with domain separator", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 10;
+    const sharedNonce = new anchor.BN(Date.now() + Math.floor(Math.random() * 1000));
+    const sharedExpiration = new anchor.BN(Math.floor(Date.now() / 1000) + 300);
+
+    const mainnetRequest = createTransferRequest(
+      recipient.publicKey,
+      null,
+      new anchor.BN(transferAmount),
+      sharedNonce,
+      sharedExpiration
+    );
+
+    const testnetDomainSeparator = createDomainSeparator(
+      "RelayDepository",
+      "1",
+      "solana-testnet",
+      program.programId
+    );
+
+    const testnetRequest = {
+      domain: Array.from(testnetDomainSeparator),
+      recipient: recipient.publicKey,
+      token: null,
+      amount: new anchor.BN(transferAmount),
+      nonce: sharedNonce,
+      expiration: sharedExpiration,
+      vaultAddress: vaultPDA,
+    };
+
+    const mainnetMessageHash = hashRequest(mainnetRequest);
+    const mainnetSignature = nacl.sign.detached(mainnetMessageHash, allocator.secretKey);
+
+    const testnetMessageHash = hashRequest(testnetRequest);
+    const testnetSignature = nacl.sign.detached(testnetMessageHash, allocator.secretKey);
+
+    const mainnetRequestPDA = await getUsedRequestPDA(mainnetRequest);
+    const testnetRequestPDA = await getUsedRequestPDA(testnetRequest);
+
+    // First execution with correct domain separator
+    await program.methods
+      .executeTransfer(mainnetRequest)
+      .accountsPartial({
+        mint: null,
+        vaultTokenAccount: null,
+        recipientTokenAccount: null,
+        relayDepository: relayDepositoryPDA,
+        executor: provider.wallet.publicKey,
+        recipient: recipient.publicKey,
+        vault: vaultPDA,
+        usedRequest: mainnetRequestPDA,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .preInstructions([
+        anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+          publicKey: allocator.publicKey.toBytes(),
+          message: mainnetMessageHash,
+          signature: mainnetSignature,
+        }),
+      ])
+      .rpc();
+
+    const mainnetUsedRequestState = await program.account.usedRequest.fetch(mainnetRequestPDA);
+    assert.equal(mainnetUsedRequestState.isUsed, true);
+
+    // Second execution should fail with wrong domain separator
+    try {
+      await program.methods
+        .executeTransfer(testnetRequest)
+        .accountsPartial({
+          mint: null,
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayDepository: relayDepositoryPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA, // Use correct vault in accounts but wrong vault in request
+          usedRequest: testnetRequestPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([
+          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+            publicKey: allocator.publicKey.toBytes(),
+            message: testnetMessageHash,
+            signature: testnetSignature,
+          }),
+        ])
+        .rpc();
+
+      assert.fail("Should have failed with invalid domain separator");
+    } catch (err) {
+      assert.include(err.message, "InvalidDomainSeparator");
+      
+      try {
+        await program.account.usedRequest.fetch(testnetRequestPDA);
+        assert.fail("Request should not exist");
+      } catch (e) {
+        assert.include(e.message, "Account does not exist");
+      }
+    }
+  });
+
+  const createTransferRequest = (
+    recipient: PublicKey,
+    token: PublicKey | null,
+    amount: anchor.BN,
+    nonce: anchor.BN,
+    expiration: anchor.BN
+  ) => {
+    const domain = createDomainSeparator(
+      "RelayDepository",
+      "1",
+      "solana-mainnet",
+      program.programId
+    );
+    
+    return {
+      domain: Array.from(domain),
+      recipient,
+      token,
+      amount,
+      nonce,
+      expiration,
+      vaultAddress: vaultPDA,
+    };
+  };
 
   const hashRequest = (request: any) => {
     const message = program.coder.types.encode("transferRequest", request);

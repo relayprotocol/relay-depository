@@ -36,6 +36,10 @@ const USED_REQUEST_SEED: &[u8] = b"used_request";
 
 const VAULT_SEED: &[u8] = b"vault";
 
+const DOMAIN_NAME: &[u8] = b"RelayDepository";
+
+const DOMAIN_VERSION: &[u8] = b"1";
+
 //----------------------------------------
 // Program ID
 //----------------------------------------
@@ -53,18 +57,28 @@ pub mod relay_depository {
     /// Initialize the relay depository program with owner and allocator
     ///
     /// Creates and initializes the relay depository account with the specified
-    /// owner and allocator.
+    /// owner, allocator, and calculates the domain separator for cross-chain security.
     ///
     /// # Parameters
     /// * `ctx` - The context containing the accounts
+    /// * `chain_id` - The chain identifier (e.g., "solana-mainnet")
     ///
     /// # Returns
     /// * `Ok(())` on success
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, chain_id: String) -> Result<()> {
         let relay_depository = &mut ctx.accounts.relay_depository;
         relay_depository.owner = ctx.accounts.owner.key();
         relay_depository.allocator = ctx.accounts.allocator.key();
         relay_depository.vault_bump = ctx.bumps.vault;
+        
+        // Calculate domain separator internally to ensure correctness
+        relay_depository.domain_separator = Some(create_domain_separator(
+            DOMAIN_NAME,
+            DOMAIN_VERSION,
+            chain_id.as_bytes(),
+            &ctx.program_id
+        ));
+        
         Ok(())
     }
 
@@ -109,6 +123,136 @@ pub mod relay_depository {
             CustomError::Unauthorized
         );
         relay_depository.owner = new_owner;
+        Ok(())
+    }
+
+    /// Migrate an existing RelayDepository account to include the `domain_separator` field.
+    ///
+    /// Reallocates legacy RelayDepository accounts to add the `domain_separator` field.
+    /// The existing data is preserved, and only this new field is appended in place.
+    /// Only the account owner can call this once, provided sufficient SOL for rent.
+    ///
+    /// # Parameters
+    /// * `ctx` - The context containing the accounts
+    /// * `chain_id` - The chain identifier (e.g., "solana-mainnet")
+    ///
+    /// # Returns
+    /// * `Ok(())` on success
+    /// * `Err(error)` if not authorized or domain separator already set
+    pub fn migrate_domain_separator(ctx: Context<MigrateDomainSeparator>, chain_id: String) -> Result<()> {
+        let relay_info = &ctx.accounts.relay_depository;
+        
+        // Validate PDA
+        let (expected_pda, _bump) = Pubkey::find_program_address(
+            &[RELAY_DEPOSITORY_SEED],
+            ctx.program_id
+        );
+
+        require_keys_eq!(
+            expected_pda,
+            relay_info.key(),
+            CustomError::InvalidRelayDepositoryPDA
+        );
+
+        // Read and store the current account data, then drop the borrow
+        let (owner, allocator, vault_bump, current_size) = {
+            let old_data_bytes = relay_info.try_borrow_data()?;
+            
+            // Strict size validation for legacy RelayDepository (without domain_separator)
+            let expected_legacy_size = 8 + 32 + 32 + 1; // discriminator + owner + allocator + vault_bump
+            
+            // Check if already migrated (has domain_separator field) 
+            if old_data_bytes.len() > expected_legacy_size {
+                return Err(CustomError::DomainSeparatorAlreadySet.into());
+            }
+            
+            // Must be exactly the legacy size - no more, no less
+            require!(
+                old_data_bytes.len() == expected_legacy_size,
+                CustomError::InvalidAccountSize
+            );
+            
+            // Verify the account discriminator matches the original RelayDepository discriminator
+            // This is the discriminator from the pre-migration account: 80359cbdf353f56b
+            let expected_discriminator: [u8; 8] = [0x80, 0x35, 0x9c, 0xbd, 0xf3, 0x53, 0xf5, 0x6b];
+            require!(
+                old_data_bytes[0..8] == expected_discriminator,
+                CustomError::InvalidAccountDiscriminator
+            );
+            
+            // Safe data parsing with bounds checking
+            let data = &old_data_bytes[8..]; // Skip discriminator
+            require!(data.len() >= 65, CustomError::MalformedAccount); // 32 + 32 + 1
+            
+            let owner = Pubkey::new_from_array(data[0..32].try_into().unwrap());
+            let allocator = Pubkey::new_from_array(data[32..64].try_into().unwrap());
+            let vault_bump = data[64];
+            let current_size = old_data_bytes.len();
+            
+            (owner, allocator, vault_bump, current_size)
+        }; // Borrow is dropped here
+            
+        // Only owner can migrate
+        require_keys_eq!(
+            ctx.accounts.owner.key(),
+            owner,
+            CustomError::Unauthorized
+        );
+
+        // Reentrancy protection: Check that this is not a nested call
+        let current_ix_index = anchor_lang::solana_program::sysvar::instructions::load_current_index_checked(
+            &ctx.accounts.ix_sysvar
+        )?;
+        require!(
+            current_ix_index == 0,
+            CustomError::ReentrancyDetected
+        );
+
+        // Manually reallocate the account
+        let new_size = 8 + RelayDepository::INIT_SPACE;
+        
+        if new_size > current_size {
+            let rent = Rent::get()?;
+            let new_minimum_balance = rent.minimum_balance(new_size);
+            let current_balance = relay_info.lamports();
+            
+            if new_minimum_balance > current_balance {
+                let additional_rent = new_minimum_balance - current_balance;
+                
+                invoke(
+                    &system_instruction::transfer(
+                        ctx.accounts.owner.key,
+                        relay_info.key,
+                        additional_rent,
+                    ),
+                    &[
+                        ctx.accounts.owner.to_account_info(),
+                        relay_info.to_account_info(),
+                        ctx.accounts.system_program.to_account_info(),
+                    ],
+                )?;
+            }
+            
+            relay_info.realloc(new_size, true)?;
+        }
+        let new_struct = RelayDepository {
+            owner,
+            allocator,
+            vault_bump,
+            domain_separator: Some(create_domain_separator(
+                DOMAIN_NAME,
+                DOMAIN_VERSION,
+                chain_id.as_bytes(),
+                &ctx.program_id,
+            )),
+        };
+        
+        let mut data = relay_info.try_borrow_mut_data()?;
+        let mut dst = &mut data[..];
+        new_struct
+            .try_serialize(&mut dst)
+            .map_err(|_| CustomError::AccountWriteFailed)?;
+        
         Ok(())
     }
 
@@ -261,6 +405,13 @@ pub mod relay_depository {
             CustomError::SignatureExpired
         );
 
+        // Validate vault address matches the expected vault
+        require_keys_eq!(
+            ctx.accounts.vault.key(),
+            request.vault_address,
+            CustomError::InvalidVaultAddress
+        );
+
         // Validate allocator signature
         let cur_index: usize =
             sysvar::instructions::load_current_index_checked(&ctx.accounts.ix_sysvar)?.into();
@@ -277,6 +428,14 @@ pub mod relay_depository {
             &relay_depository.allocator,
             &request,
         )?;
+
+        // Validate domain separator (if set)
+        if let Some(expected_domain) = relay_depository.domain_separator {
+            require!(
+                request.domain == expected_domain,
+                CustomError::InvalidDomainSeparator
+            );
+        }
 
         used_request.is_used = true;
 
@@ -396,6 +555,8 @@ pub struct RelayDepository {
     pub allocator: Pubkey,
     /// The bump seed for the vault PDA, used for deriving the vault address
     pub vault_bump: u8,
+    /// Expected domain separator hash for this deployment (Optional for upgrade compatibility)
+    pub domain_separator: Option<[u8; 32]>,
 }
 
 /// Account that tracks whether a transfer request has been used
@@ -477,6 +638,30 @@ pub struct SetOwner<'info> {
 
     /// The current owner of the relay depository
     pub owner: Signer<'info>,
+}
+
+/// Accounts required for migrating domain separator
+#[derive(Accounts)]
+pub struct MigrateDomainSeparator<'info> {
+    /// The relay depository account to migrate in-place
+    /// CHECK: This is the existing relay depository account to be migrated
+    #[account(
+        mut,
+        seeds = [RELAY_DEPOSITORY_SEED],
+        bump
+    )]
+    pub relay_depository: UncheckedAccount<'info>,
+
+    /// The owner of the relay depository (also pays for reallocation)
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    /// System program for reallocation
+    pub system_program: Program<'info, System>,
+
+    /// The instruction sysvar for reentrancy protection
+    /// CHECK: The instruction sysvar for reentrancy protection
+    pub ix_sysvar: AccountInfo<'info>,
 }
 
 /// Accounts required for depositing native currency
@@ -647,6 +832,8 @@ pub struct ExecuteTransfer<'info> {
 /// Structure representing a transfer request signed by the allocator
 #[derive(AnchorSerialize, AnchorDeserialize, Copy, Clone, PartialEq, Debug)]
 pub struct TransferRequest {
+    /// Domain separator
+    pub domain: [u8; 32],
     /// The recipient of the transfer
     pub recipient: Pubkey,
     /// The token mint (None for native SOL, Some(mint) for SPL tokens)
@@ -657,6 +844,8 @@ pub struct TransferRequest {
     pub nonce: u64,
     /// The expiration timestamp for the request
     pub expiration: i64,
+    /// The vault address that funds will be withdrawn from
+    pub vault_address: Pubkey,
 }
 
 impl TransferRequest {
@@ -749,6 +938,42 @@ pub enum CustomError {
     /// Thrown when a transfer would leave the vault with insufficient balance for rent
     #[msg("Vault has insufficient balance to remain rent-exempt after transfer")]
     InsufficientVaultBalance,
+
+    /// Thrown when the domain separator is invalid
+    #[msg("Invalid domain separator")]
+    InvalidDomainSeparator,
+
+    /// Thrown when trying to set domain separator on an already migrated contract
+    #[msg("Domain separator already set")]
+    DomainSeparatorAlreadySet,
+
+    /// Thrown when the vault address doesn't match the expected vault
+    #[msg("Invalid vault address")]
+    InvalidVaultAddress,
+
+    /// Thrown when the account data write fails
+    #[msg("Failed to write account data")]
+    AccountWriteFailed,
+
+    /// Thrown when the relay depository PDA is invalid
+    #[msg("Invalid RelayDepository PDA")]
+    InvalidRelayDepositoryPDA,
+
+    /// Thrown when the account data is malformed
+    #[msg("Malformed account data")]
+    MalformedAccount,
+
+    /// Thrown when the account discriminator is invalid
+    #[msg("Invalid account discriminator")]
+    InvalidAccountDiscriminator,
+
+    /// Thrown when reentrancy is detected
+    #[msg("Reentrancy detected")]
+    ReentrancyDetected,
+
+    /// Thrown when the account size doesn't match expected legacy size
+    #[msg("Invalid account size for migration")]
+    InvalidAccountSize,
 }
 
 //----------------------------------------
@@ -835,6 +1060,30 @@ fn validate_ed25519_signature_instruction(
     Ok(())
 }
 
+/// Creates the expected domain separator hash
+///
+/// Combines name, version, chain_id and program_id into a single hash
+/// for efficient validation and storage.
+///
+/// # Parameters
+/// * `name` - Protocol name (e.g., b"RelayDepository")
+/// * `version` - Version bytes (e.g., b"1")
+/// * `chain_id` - Chain identifier (e.g., b"solana-mainnet")
+/// * `program_id` - The program ID
+///
+/// # Returns
+/// * 32-byte domain separator hash
+pub fn create_domain_separator(name: &[u8], version: &[u8], chain_id: &[u8], program_id: &Pubkey) -> [u8; 32] {
+    use anchor_lang::solana_program::hash::hash;
+    
+    let mut data = Vec::new();
+    data.extend_from_slice(name);
+    data.extend_from_slice(version);
+    data.extend_from_slice(chain_id);
+    data.extend_from_slice(&program_id.to_bytes());
+    
+    hash(&data).to_bytes()
+}
 
 /// Calculates the transfer fee for a token
 ///
