@@ -1432,11 +1432,13 @@ describe("Relay Depository", () => {
 
     // Create transfer request with expiration in the past
     const request = {
+      domain: Array.from(domainSeparator),
       recipient: recipient.publicKey,
       token: null,
       amount: new anchor.BN(transferAmount),
       nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
       expiration: new anchor.BN(Math.floor(Date.now() / 1000) - 300), // Expired 5 minutes ago
+      vaultAddress: vaultPDA,
     };
 
     const messagHash = hashRequest(request);
@@ -1478,13 +1480,13 @@ describe("Relay Depository", () => {
   it("Should fail without Ed25519 signature instruction", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 10;
 
-    const request = {
-      recipient: recipient.publicKey,
-      token: null,
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request = createTransferRequest(
+      recipient.publicKey,
+      null,
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
     const requestPDA = await getUsedRequestPDA(request);
 
@@ -1516,24 +1518,26 @@ describe("Relay Depository", () => {
 
   it("Should fail with message mismatch (signed different request)", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 10;
+    const sharedNonce = new anchor.BN(Date.now() + Math.floor(Math.random() * 1000));
+    const sharedExpiration = new anchor.BN(Math.floor(Date.now() / 1000) + 300);
 
     // Request that will be signed
-    const signedRequest = {
-      recipient: recipient.publicKey,
-      token: null,
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const signedRequest = createTransferRequest(
+      recipient.publicKey,
+      null,
+      new anchor.BN(transferAmount),
+      sharedNonce,
+      sharedExpiration
+    );
 
     // Different request that will be submitted (different amount)
-    const submittedRequest = {
-      recipient: recipient.publicKey,
-      token: null,
-      amount: new anchor.BN(transferAmount * 2), // Different amount
-      nonce: signedRequest.nonce,
-      expiration: signedRequest.expiration,
-    };
+    const submittedRequest = createTransferRequest(
+      recipient.publicKey,
+      null,
+      new anchor.BN(transferAmount * 2), // Different amount
+      sharedNonce,
+      sharedExpiration
+    );
 
     const signedMessageHash = hashRequest(signedRequest);
     const signature = nacl.sign.detached(signedMessageHash, allocator.secretKey);
@@ -1634,13 +1638,13 @@ describe("Relay Depository", () => {
     const transferAmount = LAMPORTS_PER_SOL / 10;
 
     // Create request with mint2022 but try to use wrong accounts
-    const request = {
-      recipient: recipient.publicKey,
-      token: mint2022Pubkey, // Request is for Token2022
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request = createTransferRequest(
+      recipient.publicKey,
+      mint2022Pubkey, // Request is for Token2022
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
     const messagHash = hashRequest(request);
     const signature = nacl.sign.detached(messagHash, allocator.secretKey);
@@ -1806,13 +1810,13 @@ describe("Relay Depository", () => {
 
     const transferAmount = LAMPORTS_PER_SOL;
 
-    const request = {
-      recipient: recipient.publicKey,
-      token: newMintPubkey,
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request = createTransferRequest(
+      recipient.publicKey,
+      newMintPubkey,
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
     const messagHash = hashRequest(request);
     const signature = nacl.sign.detached(messagHash, allocator.secretKey);
@@ -1861,7 +1865,7 @@ describe("Relay Depository", () => {
 
     try {
       await program.methods
-        .initialize()
+        .initialize("solana-mainnet")
         .accountsPartial({
           relayDepository: relayDepositoryPDA,
           vault: vaultPDA,
@@ -1931,13 +1935,13 @@ describe("Relay Depository", () => {
   it("Should fail execute token transfer with invalid token program", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 10;
 
-    const request = {
-      recipient: recipient.publicKey,
-      token: mintPubkey, // SPL Token
-      amount: new anchor.BN(transferAmount),
-      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
-      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
-    };
+    const request = createTransferRequest(
+      recipient.publicKey,
+      mintPubkey, // SPL Token
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
 
     const messagHash = hashRequest(request);
     const signature = nacl.sign.detached(messagHash, allocator.secretKey);
@@ -2361,9 +2365,70 @@ describe("Relay Depository", () => {
       assert.fail("Should have failed with invalid domain separator");
     } catch (err) {
       assert.include(err.message, "InvalidDomainSeparator");
-      
+
       try {
         await program.account.usedRequest.fetch(testnetRequestPDA);
+        assert.fail("Request should not exist");
+      } catch (e) {
+        assert.include(e.message, "Account does not exist");
+      }
+    }
+  });
+
+  it("Should fail with invalid vault address in request", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 10;
+
+    // Create a fake vault address that differs from the actual vault PDA
+    const fakeVaultAddress = Keypair.generate().publicKey;
+
+    // Create a request with wrong vault address
+    const requestWithWrongVault = {
+      domain: Array.from(domainSeparator),
+      recipient: recipient.publicKey,
+      token: null,
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
+      vaultAddress: fakeVaultAddress, // Wrong vault address
+    };
+
+    const messageHash = hashRequest(requestWithWrongVault);
+    const signature = nacl.sign.detached(messageHash, allocator.secretKey);
+    const requestPDA = await getUsedRequestPDA(requestWithWrongVault);
+
+    try {
+      await program.methods
+        .executeTransfer(requestWithWrongVault)
+        .accountsPartial({
+          mint: null,
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayDepository: relayDepositoryPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA, // Actual vault PDA
+          usedRequest: requestPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([
+          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+            publicKey: allocator.publicKey.toBytes(),
+            message: messageHash,
+            signature: signature,
+          }),
+        ])
+        .rpc();
+
+      assert.fail("Should have failed with invalid vault address");
+    } catch (err) {
+      assert.include(err.message, "InvalidVaultAddress");
+
+      // Verify request was not marked as used
+      try {
+        await program.account.usedRequest.fetch(requestPDA);
         assert.fail("Request should not exist");
       } catch (e) {
         assert.include(e.message, "Account does not exist");
