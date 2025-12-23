@@ -233,6 +233,402 @@ contract RelayDepositoryTest is BaseTest, EIP712 {
         relayDepository.execute(request, signature);
     }
 
+    // ============ Additional Tests ============
+
+    error AddressCannotBeZero();
+    error CallRequestExpired();
+    error CallRequestAlreadyUsed();
+    error CallFailed(bytes returnData);
+
+    function test_setAllocator_zeroAddress() public {
+        vm.expectRevert(AddressCannotBeZero.selector);
+        relayDepository.setAllocator(address(0));
+    }
+
+    function test_execute_expired() public {
+        vm.deal(alice.addr, 1 ether);
+        vm.prank(alice.addr);
+        relayDepository.depositNative{value: 1 ether}(alice.addr, bytes32(uint256(1)));
+
+        Call[] memory calls = new Call[](1);
+        calls[0] = Call({
+            to: alice.addr,
+            data: bytes(""),
+            value: 1 ether,
+            allowFailure: false
+        });
+
+        // Create call request with expired timestamp
+        CallRequest memory request = CallRequest({
+            calls: calls,
+            nonce: block.prevrandao,
+            expiration: block.timestamp - 1 // Already expired
+        });
+
+        // Sign the call request
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            allocator.key,
+            _hashCallRequest(request)
+        );
+        bytes memory signature = bytes.concat(r, s, bytes1(v));
+
+        vm.expectRevert(CallRequestExpired.selector);
+        relayDepository.execute(request, signature);
+    }
+
+    function test_execute_alreadyUsed() public {
+        vm.deal(alice.addr, 2 ether);
+        vm.prank(alice.addr);
+        relayDepository.depositNative{value: 2 ether}(alice.addr, bytes32(uint256(1)));
+
+        Call[] memory calls = new Call[](1);
+        calls[0] = Call({
+            to: alice.addr,
+            data: bytes(""),
+            value: 1 ether,
+            allowFailure: false
+        });
+
+        CallRequest memory request = CallRequest({
+            calls: calls,
+            nonce: 12345, // Fixed nonce for replay
+            expiration: block.timestamp + 3600
+        });
+
+        // Sign the call request
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            allocator.key,
+            _hashCallRequest(request)
+        );
+        bytes memory signature = bytes.concat(r, s, bytes1(v));
+
+        // First execution should succeed
+        relayDepository.execute(request, signature);
+
+        // Second execution should fail with CallRequestAlreadyUsed
+        vm.expectRevert(CallRequestAlreadyUsed.selector);
+        relayDepository.execute(request, signature);
+    }
+
+    function test_execute_callFailed() public {
+        vm.deal(alice.addr, 1 ether);
+        vm.prank(alice.addr);
+        relayDepository.depositNative{value: 1 ether}(alice.addr, bytes32(uint256(1)));
+
+        Call[] memory calls = new Call[](1);
+        // Try to call a contract that will revert
+        calls[0] = Call({
+            to: address(erc20),
+            data: abi.encodeWithSelector(erc20.transfer.selector, alice.addr, 1000 ether), // More than balance
+            value: 0,
+            allowFailure: false // Should revert
+        });
+
+        CallRequest memory request = CallRequest({
+            calls: calls,
+            nonce: block.prevrandao,
+            expiration: block.timestamp + 3600
+        });
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            allocator.key,
+            _hashCallRequest(request)
+        );
+        bytes memory signature = bytes.concat(r, s, bytes1(v));
+
+        vm.expectRevert(); // CallFailed with return data
+        relayDepository.execute(request, signature);
+    }
+
+    function test_execute_allowFailure() public {
+        vm.deal(alice.addr, 1 ether);
+        vm.prank(alice.addr);
+        relayDepository.depositNative{value: 1 ether}(alice.addr, bytes32(uint256(1)));
+
+        Call[] memory calls = new Call[](2);
+        // First call will fail but allowFailure is true
+        calls[0] = Call({
+            to: address(erc20),
+            data: abi.encodeWithSelector(erc20.transfer.selector, alice.addr, 1000 ether), // Will fail
+            value: 0,
+            allowFailure: true // Should NOT revert
+        });
+        // Second call should succeed
+        calls[1] = Call({
+            to: alice.addr,
+            data: bytes(""),
+            value: 0.5 ether,
+            allowFailure: false
+        });
+
+        CallRequest memory request = CallRequest({
+            calls: calls,
+            nonce: block.prevrandao,
+            expiration: block.timestamp + 3600
+        });
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            allocator.key,
+            _hashCallRequest(request)
+        );
+        bytes memory signature = bytes.concat(r, s, bytes1(v));
+
+        uint256 aliceBalanceBefore = address(alice.addr).balance;
+        CallResult[] memory results = relayDepository.execute(request, signature);
+        uint256 aliceBalanceAfter = address(alice.addr).balance;
+
+        // First call should have failed
+        assertFalse(results[0].success);
+        // Second call should have succeeded
+        assertTrue(results[1].success);
+        // Alice should have received 0.5 ether
+        assertEq(aliceBalanceAfter - aliceBalanceBefore, 0.5 ether);
+    }
+
+    function test_depositNative_zeroDepositor() public {
+        vm.deal(alice.addr, 1 ether);
+
+        // When depositor is address(0), msg.sender should be used
+        vm.expectEmit(true, true, true, true, address(relayDepository));
+        emit RelayNativeDeposit(alice.addr, 1 ether, bytes32(uint256(1)));
+
+        vm.prank(alice.addr);
+        relayDepository.depositNative{value: 1 ether}(
+            address(0), // Zero address - should use msg.sender
+            bytes32(uint256(1))
+        );
+    }
+
+    function test_depositErc20_zeroDepositor() public {
+        erc20.mint(alice.addr, 1 ether);
+
+        vm.prank(alice.addr);
+        erc20.approve(address(relayDepository), 1 ether);
+
+        // When depositor is address(0), msg.sender should be used
+        vm.expectEmit(true, true, true, true, address(relayDepository));
+        emit RelayErc20Deposit(alice.addr, address(erc20), 1 ether, bytes32(uint256(1)));
+
+        vm.prank(alice.addr);
+        relayDepository.depositErc20(
+            address(0), // Zero address - should use msg.sender
+            address(erc20),
+            1 ether,
+            bytes32(uint256(1))
+        );
+    }
+
+    function test_execute_multipleCalls() public {
+        // Setup: deposit native and ERC20
+        vm.deal(alice.addr, 2 ether);
+        vm.prank(alice.addr);
+        relayDepository.depositNative{value: 2 ether}(alice.addr, bytes32(uint256(1)));
+
+        erc20.mint(address(relayDepository), 100 ether);
+
+        Call[] memory calls = new Call[](3);
+        // Call 1: Send native to alice
+        calls[0] = Call({
+            to: alice.addr,
+            data: bytes(""),
+            value: 1 ether,
+            allowFailure: false
+        });
+        // Call 2: Send ERC20 to bob
+        calls[1] = Call({
+            to: address(erc20),
+            data: abi.encodeWithSelector(erc20.transfer.selector, bob.addr, 50 ether),
+            value: 0,
+            allowFailure: false
+        });
+        // Call 3: Send native to bob
+        calls[2] = Call({
+            to: bob.addr,
+            data: bytes(""),
+            value: 0.5 ether,
+            allowFailure: false
+        });
+
+        CallRequest memory request = CallRequest({
+            calls: calls,
+            nonce: block.prevrandao,
+            expiration: block.timestamp + 3600
+        });
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            allocator.key,
+            _hashCallRequest(request)
+        );
+        bytes memory signature = bytes.concat(r, s, bytes1(v));
+
+        uint256 aliceNativeBefore = address(alice.addr).balance;
+        uint256 bobNativeBefore = address(bob.addr).balance;
+        uint256 bobErc20Before = erc20.balanceOf(bob.addr);
+
+        CallResult[] memory results = relayDepository.execute(request, signature);
+
+        // All calls should succeed
+        assertTrue(results[0].success);
+        assertTrue(results[1].success);
+        assertTrue(results[2].success);
+
+        // Verify balances
+        assertEq(address(alice.addr).balance - aliceNativeBefore, 1 ether);
+        assertEq(address(bob.addr).balance - bobNativeBefore, 0.5 ether);
+        assertEq(erc20.balanceOf(bob.addr) - bobErc20Before, 50 ether);
+    }
+
+    function test_transferOwnership() public {
+        // Initial owner is address(this)
+        assertEq(relayDepository.owner(), address(this));
+
+        // Transfer ownership to alice
+        relayDepository.transferOwnership(alice.addr);
+        assertEq(relayDepository.owner(), alice.addr);
+
+        // Old owner should not be able to set allocator
+        vm.expectRevert(Unauthorized.selector);
+        relayDepository.setAllocator(bob.addr);
+
+        // New owner should be able to set allocator
+        vm.prank(alice.addr);
+        relayDepository.setAllocator(bob.addr);
+        assertEq(relayDepository.allocator(), bob.addr);
+    }
+
+    function test_renounceOwnership() public {
+        // Renounce ownership
+        relayDepository.renounceOwnership();
+        assertEq(relayDepository.owner(), address(0));
+
+        // No one should be able to set allocator
+        vm.expectRevert(Unauthorized.selector);
+        relayDepository.setAllocator(bob.addr);
+
+        vm.prank(alice.addr);
+        vm.expectRevert(Unauthorized.selector);
+        relayDepository.setAllocator(bob.addr);
+    }
+
+    function test_depositErc20_insufficientBalance() public {
+        // Alice has no tokens
+        vm.prank(alice.addr);
+        erc20.approve(address(relayDepository), 1 ether);
+
+        vm.expectRevert();
+        vm.prank(alice.addr);
+        relayDepository.depositErc20(
+            alice.addr,
+            address(erc20),
+            1 ether,
+            bytes32(uint256(1))
+        );
+    }
+
+    function test_depositErc20_insufficientAllowance() public {
+        erc20.mint(alice.addr, 1 ether);
+
+        // Approve less than deposit amount
+        vm.prank(alice.addr);
+        erc20.approve(address(relayDepository), 0.5 ether);
+
+        vm.expectRevert();
+        vm.prank(alice.addr);
+        relayDepository.depositErc20(
+            alice.addr,
+            address(erc20),
+            1 ether,
+            bytes32(uint256(1))
+        );
+    }
+
+    function test_execute_insufficientBalance() public {
+        // Deposit only 0.5 ether
+        vm.deal(alice.addr, 0.5 ether);
+        vm.prank(alice.addr);
+        relayDepository.depositNative{value: 0.5 ether}(alice.addr, bytes32(uint256(1)));
+
+        Call[] memory calls = new Call[](1);
+        calls[0] = Call({
+            to: alice.addr,
+            data: bytes(""),
+            value: 1 ether, // More than deposited
+            allowFailure: false
+        });
+
+        CallRequest memory request = CallRequest({
+            calls: calls,
+            nonce: block.prevrandao,
+            expiration: block.timestamp + 3600
+        });
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            allocator.key,
+            _hashCallRequest(request)
+        );
+        bytes memory signature = bytes.concat(r, s, bytes1(v));
+
+        vm.expectRevert(); // Should fail due to insufficient balance
+        relayDepository.execute(request, signature);
+    }
+
+    function test_execute_emptyCallsArray() public {
+        Call[] memory calls = new Call[](0);
+
+        CallRequest memory request = CallRequest({
+            calls: calls,
+            nonce: block.prevrandao,
+            expiration: block.timestamp + 3600
+        });
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            allocator.key,
+            _hashCallRequest(request)
+        );
+        bytes memory signature = bytes.concat(r, s, bytes1(v));
+
+        // Should succeed with empty results
+        CallResult[] memory results = relayDepository.execute(request, signature);
+        assertEq(results.length, 0);
+    }
+
+    function test_depositNative_differentDepositor() public {
+        vm.deal(alice.addr, 1 ether);
+
+        // Alice deposits but credits bob
+        vm.expectEmit(true, true, true, true, address(relayDepository));
+        emit RelayNativeDeposit(bob.addr, 1 ether, bytes32(uint256(1)));
+
+        vm.prank(alice.addr);
+        relayDepository.depositNative{value: 1 ether}(
+            bob.addr, // Credit to bob
+            bytes32(uint256(1))
+        );
+
+        assertEq(address(relayDepository).balance, 1 ether);
+    }
+
+    function test_depositErc20_differentDepositor() public {
+        erc20.mint(alice.addr, 1 ether);
+
+        vm.prank(alice.addr);
+        erc20.approve(address(relayDepository), 1 ether);
+
+        // Alice deposits but credits bob
+        vm.expectEmit(true, true, true, true, address(relayDepository));
+        emit RelayErc20Deposit(bob.addr, address(erc20), 1 ether, bytes32(uint256(1)));
+
+        vm.prank(alice.addr);
+        relayDepository.depositErc20(
+            bob.addr, // Credit to bob
+            address(erc20),
+            1 ether,
+            bytes32(uint256(1))
+        );
+
+        assertEq(erc20.balanceOf(address(relayDepository)), 1 ether);
+    }
+
     // Utils (copied from `RelayDepository`)
 
     function _hashCallRequest(
