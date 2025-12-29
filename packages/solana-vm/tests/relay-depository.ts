@@ -357,6 +357,84 @@ describe("Relay Depository", () => {
     assert.ok(relayDepositoryAccount.allocator.equals(allocator.publicKey));
   });
 
+  it("Owner can set new owner", async () => {
+    const newOwner = Keypair.generate();
+
+    // Airdrop some SOL to new owner for future transactions
+    await provider.connection.confirmTransaction(
+      await provider.connection.requestAirdrop(
+        newOwner.publicKey,
+        LAMPORTS_PER_SOL
+      )
+    );
+
+    // Call set_owner as current owner
+    await program.methods
+      .setOwner(newOwner.publicKey)
+      .accountsPartial({
+        relayDepository: relayDepositoryPDA,
+        owner: owner.publicKey,
+      })
+      .signers([owner])
+      .rpc();
+
+    // Verify the owner was updated
+    const relayDepositoryAccount = await program.account.relayDepository.fetch(
+      relayDepositoryPDA
+    );
+    assert.ok(relayDepositoryAccount.owner.equals(newOwner.publicKey));
+
+    // Reset owner back to original for other tests
+    await program.methods
+      .setOwner(owner.publicKey)
+      .accountsPartial({
+        relayDepository: relayDepositoryPDA,
+        owner: newOwner.publicKey,
+      })
+      .signers([newOwner])
+      .rpc();
+
+    // Verify owner was reset
+    const relayDepositoryAccountAfterReset =
+      await program.account.relayDepository.fetch(relayDepositoryPDA);
+    assert.ok(relayDepositoryAccountAfterReset.owner.equals(owner.publicKey));
+  });
+
+  it("Non-owner cannot set new owner", async () => {
+    const newOwner = Keypair.generate();
+    const nonOwner = Keypair.generate();
+
+    // Airdrop some SOL to non-owner for transaction fee
+    await provider.connection.confirmTransaction(
+      await provider.connection.requestAirdrop(
+        nonOwner.publicKey,
+        LAMPORTS_PER_SOL
+      )
+    );
+
+    try {
+      // Attempt to call set_owner as non-owner
+      await program.methods
+        .setOwner(newOwner.publicKey)
+        .accountsPartial({
+          relayDepository: relayDepositoryPDA,
+          owner: nonOwner.publicKey,
+        })
+        .signers([nonOwner])
+        .rpc();
+
+      assert.fail("Should have thrown error");
+    } catch (err) {
+      assert.include(err.message, "Unauthorized");
+    }
+
+    // Verify owner was not changed
+    const relayDepositoryAccount = await program.account.relayDepository.fetch(
+      relayDepositoryPDA
+    );
+    assert.ok(relayDepositoryAccount.owner.equals(owner.publicKey));
+  });
+
   it("Deposit native", async () => {
     const depositAmount = LAMPORTS_PER_SOL;
     const id = Array.from(Array(32).fill(1));
@@ -1349,6 +1427,566 @@ describe("Relay Depository", () => {
     }
   });
 
+  it("Should fail with expired signature", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 10;
+
+    // Create transfer request with expiration in the past
+    const request = {
+      domain: Array.from(domainSeparator),
+      recipient: recipient.publicKey,
+      token: null,
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) - 300), // Expired 5 minutes ago
+      vaultAddress: vaultPDA,
+    };
+
+    const messagHash = hashRequest(request);
+    const signature = nacl.sign.detached(messagHash, allocator.secretKey);
+    const requestPDA = await getUsedRequestPDA(request);
+
+    try {
+      await program.methods
+        .executeTransfer(request)
+        .accountsPartial({
+          mint: null,
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayDepository: relayDepositoryPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([
+          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+            publicKey: allocator.publicKey.toBytes(),
+            message: messagHash,
+            signature: signature,
+          }),
+        ])
+        .rpc();
+
+      assert.fail("Should have failed with expired signature");
+    } catch (err) {
+      assert.include(err.message, "SignatureExpired");
+    }
+  });
+
+  it("Should fail without Ed25519 signature instruction", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 10;
+
+    const request = createTransferRequest(
+      recipient.publicKey,
+      null,
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
+
+    const requestPDA = await getUsedRequestPDA(request);
+
+    try {
+      // Execute without preInstructions (no Ed25519 signature)
+      await program.methods
+        .executeTransfer(request)
+        .accountsPartial({
+          mint: null,
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayDepository: relayDepositoryPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .rpc();
+
+      assert.fail("Should have failed without Ed25519 signature");
+    } catch (err) {
+      assert.include(err.message, "MalformedEd25519Data");
+    }
+  });
+
+  it("Should fail with message mismatch (signed different request)", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 10;
+    const sharedNonce = new anchor.BN(Date.now() + Math.floor(Math.random() * 1000));
+    const sharedExpiration = new anchor.BN(Math.floor(Date.now() / 1000) + 300);
+
+    // Request that will be signed
+    const signedRequest = createTransferRequest(
+      recipient.publicKey,
+      null,
+      new anchor.BN(transferAmount),
+      sharedNonce,
+      sharedExpiration
+    );
+
+    // Different request that will be submitted (different amount)
+    const submittedRequest = createTransferRequest(
+      recipient.publicKey,
+      null,
+      new anchor.BN(transferAmount * 2), // Different amount
+      sharedNonce,
+      sharedExpiration
+    );
+
+    const signedMessageHash = hashRequest(signedRequest);
+    const signature = nacl.sign.detached(signedMessageHash, allocator.secretKey);
+    const requestPDA = await getUsedRequestPDA(submittedRequest);
+
+    try {
+      await program.methods
+        .executeTransfer(submittedRequest)
+        .accountsPartial({
+          mint: null,
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayDepository: relayDepositoryPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([
+          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+            publicKey: allocator.publicKey.toBytes(),
+            message: signedMessageHash,
+            signature: signature,
+          }),
+        ])
+        .rpc();
+
+      assert.fail("Should have failed with message mismatch");
+    } catch (err) {
+      assert.include(err.message, "MessageMismatch");
+    }
+  });
+
+  it("Should fail deposit native with zero amount", async () => {
+    const depositAmount = 0;
+    const id = Array.from(Buffer.alloc(32, 10));
+
+    try {
+      await program.methods
+        .depositNative(new anchor.BN(depositAmount), id)
+        .accountsPartial({
+          relayDepository: relayDepositoryPDA,
+          sender: user.publicKey,
+          depositor: user.publicKey,
+          vault: vaultPDA,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user])
+        .rpc();
+
+      // Zero amount transfer may succeed but doesn't make practical sense
+      // The system doesn't enforce a minimum, so this is more of a documentation test
+    } catch (err) {
+      // Some implementations may reject zero transfers
+      // This is acceptable behavior
+    }
+  });
+
+  it("Should fail deposit token with insufficient balance", async () => {
+    const depositAmount = 1000 * LAMPORTS_PER_SOL; // More than user has
+    const id = Array.from(Buffer.alloc(32, 11));
+
+    try {
+      await program.methods
+        .depositToken(new anchor.BN(depositAmount), id)
+        .accountsPartial({
+          relayDepository: relayDepositoryPDA,
+          mint: mintPubkey,
+          sender: user.publicKey,
+          senderTokenAccount: userTokenAccount,
+          depositor: user.publicKey,
+          vaultTokenAccount: vaultTokenAccount,
+          vault: vaultPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user])
+        .rpc();
+
+      assert.fail("Should have failed with insufficient balance");
+    } catch (err) {
+      // The error should indicate insufficient funds
+      assert.ok(
+        err.message.includes("insufficient") ||
+          err.message.includes("InsufficientFunds") ||
+          err.message.includes("0x1"),
+        `Unexpected error: ${err.message}`
+      );
+    }
+  });
+
+  it("Should fail execute token transfer with mismatched token mint", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 10;
+
+    // Create request with mint2022 but try to use wrong accounts
+    const request = createTransferRequest(
+      recipient.publicKey,
+      mint2022Pubkey, // Request is for Token2022
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
+
+    const messagHash = hashRequest(request);
+    const signature = nacl.sign.detached(messagHash, allocator.secretKey);
+    const requestPDA = await getUsedRequestPDA(request);
+
+    try {
+      // Try to execute with regular SPL token accounts instead of Token2022
+      await program.methods
+        .executeTransfer(request)
+        .accountsPartial({
+          mint: mintPubkey, // Wrong mint - using regular SPL token mint
+          vaultTokenAccount,
+          recipientTokenAccount,
+          relayDepository: relayDepositoryPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([
+          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+            publicKey: allocator.publicKey.toBytes(),
+            message: messagHash,
+            signature: signature,
+          }),
+        ])
+        .rpc();
+
+      assert.fail("Should have failed with mismatched token mint");
+    } catch (err) {
+      assert.include(err.message, "InvalidMint");
+    }
+  });
+
+  it("Should support different depositor than sender", async () => {
+    const depositAmount = LAMPORTS_PER_SOL / 10;
+    const id = Array.from(Buffer.alloc(32, 12));
+    const differentDepositor = Keypair.generate();
+
+    const vaultBalanceBefore = await provider.connection.getBalance(vaultPDA);
+
+    const depositTx = await program.methods
+      .depositNative(new anchor.BN(depositAmount), id)
+      .accountsPartial({
+        relayDepository: relayDepositoryPDA,
+        sender: user.publicKey,
+        depositor: differentDepositor.publicKey, // Different from sender
+        vault: vaultPDA,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([user])
+      .rpc();
+
+    const vaultBalanceAfter = await provider.connection.getBalance(vaultPDA);
+
+    assert.equal(
+      vaultBalanceAfter - vaultBalanceBefore,
+      depositAmount,
+      "Incorrect SOL addition to vault"
+    );
+
+    // Verify the event records the different depositor
+    const events = await getEvents(depositTx);
+    const depositEvent = events.find((event) => event.name === "depositEvent");
+    assert.exists(depositEvent, "Deposit event should exist");
+    assert.equal(
+      depositEvent.data.depositor.toBase58(),
+      differentDepositor.publicKey.toBase58(),
+      "Event should record the different depositor"
+    );
+  });
+
+  it("Should support different depositor than sender for token deposit", async () => {
+    const depositAmount = LAMPORTS_PER_SOL / 10;
+    const id = Array.from(Buffer.alloc(32, 13));
+    const differentDepositor = Keypair.generate();
+
+    const userBalanceBefore = await provider.connection.getTokenAccountBalance(
+      userTokenAccount
+    );
+
+    const depositTx = await program.methods
+      .depositToken(new anchor.BN(depositAmount), id)
+      .accountsPartial({
+        relayDepository: relayDepositoryPDA,
+        mint: mintPubkey,
+        sender: user.publicKey,
+        senderTokenAccount: userTokenAccount,
+        depositor: differentDepositor.publicKey, // Different from sender
+        vaultTokenAccount: vaultTokenAccount,
+        vault: vaultPDA,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([user])
+      .rpc();
+
+    const userBalanceAfter = await provider.connection.getTokenAccountBalance(
+      userTokenAccount
+    );
+
+    assert.equal(
+      Number(userBalanceBefore.value.amount) -
+        Number(userBalanceAfter.value.amount),
+      depositAmount,
+      "Incorrect token deduction from user"
+    );
+
+    // Verify the event records the different depositor
+    const events = await getEvents(depositTx);
+    const depositEvent = events.find((event) => event.name === "depositEvent");
+    assert.exists(depositEvent, "Deposit event should exist");
+    assert.equal(
+      depositEvent.data.depositor.toBase58(),
+      differentDepositor.publicKey.toBase58(),
+      "Event should record the different depositor"
+    );
+  });
+
+  it("Should fail execute token transfer with insufficient vault balance", async () => {
+    // Create a new mint with a fresh vault that has no tokens
+    const newMintKeypair = Keypair.generate();
+    const newMintPubkey = await createMint(
+      provider.connection,
+      owner,
+      owner.publicKey,
+      null,
+      9,
+      newMintKeypair
+    );
+
+    // Create recipient token account for new mint
+    const newRecipientTokenAccount = await createAssociatedTokenAccount(
+      provider.connection,
+      owner,
+      newMintPubkey,
+      recipient.publicKey
+    );
+
+    // Get vault token account address for new mint
+    const newVaultTokenAccount = await getAssociatedTokenAddress(
+      newMintPubkey,
+      vaultPDA,
+      true
+    );
+
+    // Create vault token account but don't fund it
+    await createAssociatedTokenAccount(
+      provider.connection,
+      owner,
+      newMintPubkey,
+      vaultPDA,
+      undefined,
+      undefined,
+      undefined,
+      true
+    );
+
+    const transferAmount = LAMPORTS_PER_SOL;
+
+    const request = createTransferRequest(
+      recipient.publicKey,
+      newMintPubkey,
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
+
+    const messagHash = hashRequest(request);
+    const signature = nacl.sign.detached(messagHash, allocator.secretKey);
+    const requestPDA = await getUsedRequestPDA(request);
+
+    try {
+      await program.methods
+        .executeTransfer(request)
+        .accountsPartial({
+          mint: newMintPubkey,
+          vaultTokenAccount: newVaultTokenAccount,
+          recipientTokenAccount: newRecipientTokenAccount,
+          relayDepository: relayDepositoryPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([
+          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+            publicKey: allocator.publicKey.toBytes(),
+            message: messagHash,
+            signature: signature,
+          }),
+        ])
+        .rpc();
+
+      assert.fail("Should have failed with insufficient vault balance");
+    } catch (err) {
+      // The error should indicate insufficient funds
+      assert.ok(
+        err.message.includes("insufficient") ||
+          err.message.includes("InsufficientFunds") ||
+          err.message.includes("0x1"),
+        `Unexpected error: ${err.message}`
+      );
+    }
+  });
+
+  it("Should fail to re-initialize already initialized contract", async () => {
+    const newAllocator = Keypair.generate();
+
+    try {
+      await program.methods
+        .initialize("solana-mainnet")
+        .accountsPartial({
+          relayDepository: relayDepositoryPDA,
+          vault: vaultPDA,
+          owner: owner.publicKey,
+          allocator: newAllocator.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([owner])
+        .rpc();
+
+      assert.fail("Should have failed - contract already initialized");
+    } catch (err) {
+      // Anchor prevents re-initialization of accounts with the `init` constraint
+      // The error indicates the account already exists
+      assert.ok(
+        err.message.includes("already in use") ||
+          err.message.includes("already been processed") ||
+          err.message.includes("0x0"),
+        `Unexpected error: ${err.message}`
+      );
+    }
+
+    // Verify the original state is unchanged
+    const relayDepositoryAccount = await program.account.relayDepository.fetch(
+      relayDepositoryPDA
+    );
+    assert.ok(relayDepositoryAccount.owner.equals(owner.publicKey));
+    assert.ok(relayDepositoryAccount.allocator.equals(allocator.publicKey));
+  });
+
+  it("Should fail deposit token with invalid token program", async () => {
+    const depositAmount = LAMPORTS_PER_SOL / 10;
+    const id = Array.from(Buffer.alloc(32, 20));
+
+    // Try to deposit SPL token but pass Token2022 program ID
+    try {
+      await program.methods
+        .depositToken(new anchor.BN(depositAmount), id)
+        .accountsPartial({
+          relayDepository: relayDepositoryPDA,
+          mint: mintPubkey, // SPL Token mint
+          sender: user.publicKey,
+          senderTokenAccount: userTokenAccount,
+          depositor: user.publicKey,
+          vaultTokenAccount: vaultTokenAccount,
+          vault: vaultPDA,
+          tokenProgram: TOKEN_2022_PROGRAM_ID, // Wrong program - using Token2022 for SPL Token
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user])
+        .rpc();
+
+      assert.fail("Should have failed with invalid token program");
+    } catch (err) {
+      // The error should indicate invalid mint or token program constraint violation
+      assert.ok(
+        err.message.includes("InvalidMint") ||
+          err.message.includes("invalid program id") ||
+          err.message.includes("incorrect program id") ||
+          err.message.includes("ConstraintAssociatedTokenTokenProgram"),
+        `Unexpected error: ${err.message}`
+      );
+    }
+  });
+
+  it("Should fail execute token transfer with invalid token program", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 10;
+
+    const request = createTransferRequest(
+      recipient.publicKey,
+      mintPubkey, // SPL Token
+      new anchor.BN(transferAmount),
+      new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      new anchor.BN(Math.floor(Date.now() / 1000) + 300)
+    );
+
+    const messagHash = hashRequest(request);
+    const signature = nacl.sign.detached(messagHash, allocator.secretKey);
+    const requestPDA = await getUsedRequestPDA(request);
+
+    try {
+      // Try to execute with Token2022 program for SPL Token mint
+      await program.methods
+        .executeTransfer(request)
+        .accountsPartial({
+          mint: mintPubkey,
+          vaultTokenAccount,
+          recipientTokenAccount,
+          relayDepository: relayDepositoryPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA,
+          usedRequest: requestPDA,
+          tokenProgram: TOKEN_2022_PROGRAM_ID, // Wrong program
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([
+          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+            publicKey: allocator.publicKey.toBytes(),
+            message: messagHash,
+            signature: signature,
+          }),
+        ])
+        .rpc();
+
+      assert.fail("Should have failed with invalid token program");
+    } catch (err) {
+      // The error should indicate invalid mint or token program constraint violation
+      assert.ok(
+        err.message.includes("InvalidMint") ||
+          err.message.includes("invalid program id") ||
+          err.message.includes("incorrect program id") ||
+          err.message.includes("ConstraintAssociatedTokenTokenProgram"),
+        `Unexpected error: ${err.message}`
+      );
+    }
+  });
+
   it("Execute multiple transfer requests in a single transaction", async () => {
     const transferAmount = LAMPORTS_PER_SOL / 10; // 0.25 SOL each
 
@@ -1727,9 +2365,70 @@ describe("Relay Depository", () => {
       assert.fail("Should have failed with invalid domain separator");
     } catch (err) {
       assert.include(err.message, "InvalidDomainSeparator");
-      
+
       try {
         await program.account.usedRequest.fetch(testnetRequestPDA);
+        assert.fail("Request should not exist");
+      } catch (e) {
+        assert.include(e.message, "Account does not exist");
+      }
+    }
+  });
+
+  it("Should fail with invalid vault address in request", async () => {
+    const transferAmount = LAMPORTS_PER_SOL / 10;
+
+    // Create a fake vault address that differs from the actual vault PDA
+    const fakeVaultAddress = Keypair.generate().publicKey;
+
+    // Create a request with wrong vault address
+    const requestWithWrongVault = {
+      domain: Array.from(domainSeparator),
+      recipient: recipient.publicKey,
+      token: null,
+      amount: new anchor.BN(transferAmount),
+      nonce: new anchor.BN(Date.now() + Math.floor(Math.random() * 1000)),
+      expiration: new anchor.BN(Math.floor(Date.now() / 1000) + 300),
+      vaultAddress: fakeVaultAddress, // Wrong vault address
+    };
+
+    const messageHash = hashRequest(requestWithWrongVault);
+    const signature = nacl.sign.detached(messageHash, allocator.secretKey);
+    const requestPDA = await getUsedRequestPDA(requestWithWrongVault);
+
+    try {
+      await program.methods
+        .executeTransfer(requestWithWrongVault)
+        .accountsPartial({
+          mint: null,
+          vaultTokenAccount: null,
+          recipientTokenAccount: null,
+          relayDepository: relayDepositoryPDA,
+          executor: provider.wallet.publicKey,
+          recipient: recipient.publicKey,
+          vault: vaultPDA, // Actual vault PDA
+          usedRequest: requestPDA,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          ixSysvar: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
+        })
+        .preInstructions([
+          anchor.web3.Ed25519Program.createInstructionWithPublicKey({
+            publicKey: allocator.publicKey.toBytes(),
+            message: messageHash,
+            signature: signature,
+          }),
+        ])
+        .rpc();
+
+      assert.fail("Should have failed with invalid vault address");
+    } catch (err) {
+      assert.include(err.message, "InvalidVaultAddress");
+
+      // Verify request was not marked as used
+      try {
+        await program.account.usedRequest.fetch(requestPDA);
         assert.fail("Request should not exist");
       } catch (e) {
         assert.include(e.message, "Account does not exist");

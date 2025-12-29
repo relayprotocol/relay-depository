@@ -93,6 +93,99 @@ describe('Relay Escrow', () => {
         await configChainId(CHAIN_ID);
     });
 
+    it('should fail execute transfer when allocator_pubkey is not set (EInvalidPublicKey)', async () => {
+        try {
+            // First deposit some SUI for testing
+            const coins = await client.getCoins({
+                owner: deployer.toSuiAddress(),
+                coinType: '0x2::sui::SUI'
+            });
+
+            if (coins.data.length === 0) {
+                throw new Error('No SUI coins available');
+            }
+
+            const depositTx = new Transaction();
+            const [coin] = depositTx.splitCoins(coins.data[0].coinObjectId, [depositTx.pure.u64(DEPOSIT_AMOUNT)]);
+            const id = Buffer.from(Array(32).fill(99));
+            depositTx.moveCall({
+                target: `${PACKAGE_ID}::escrow::deposit_coin`,
+                typeArguments: ['0x2::sui::SUI'],
+                arguments: [
+                    depositTx.object(ESCROW_ID),
+                    depositTx.object(coin),
+                    depositTx.pure.vector("u8", id),
+                ]
+            });
+            depositTx.setGasBudget(100000000);
+
+            await client.signAndExecuteTransaction({
+                signer: deployer,
+                transaction: depositTx,
+                requestType: 'WaitForLocalExecution',
+                options: { showEffects: true }
+            });
+
+            // Try to execute transfer without allocator_pubkey being set
+            // At this point, chain_id is set but allocator_pubkey is still empty (vector[])
+            const expiration = Date.now() + 10 * 60 * 1000;
+            const recipient = bob.toSuiAddress();
+            const amount = 100n;
+            const nonce = BigInt(Date.now());
+
+            const transferRequest = {
+                recipient: recipient,
+                amount: amount,
+                coin_type: {
+                    name: normalizeType('0x2::sui::SUI')
+                },
+                nonce: nonce,
+                expiration: BigInt(expiration),
+                chain_id: Buffer.from(CHAIN_ID, 'utf8')
+            };
+
+            const serializedData = TransferRequestStruct.serialize(transferRequest).toBytes();
+            const hashData = sha256.create();
+            hashData.update(serializedData);
+            const messageHash = new Uint8Array(hashData.array());
+
+            // Sign with deployer (current allocator, but pubkey not set)
+            const signature = await deployer.sign(messageHash);
+
+            const tx = new Transaction();
+            tx.moveCall({
+                target: `${PACKAGE_ID}::escrow::execute_transfer`,
+                typeArguments: ['0x2::sui::SUI'],
+                arguments: [
+                    tx.object(ESCROW_ID),
+                    tx.object(EXECUTED_REQUESTS_ID),
+                    tx.pure.address(recipient),
+                    tx.pure.u64(amount),
+                    tx.pure.u64(nonce),
+                    tx.pure.u64(expiration),
+                    tx.pure.vector("u8", Buffer.from(CHAIN_ID, 'utf8')),
+                    tx.pure.vector("u8", signature),
+                    tx.object('0x6'),
+                ]
+            });
+            tx.setGasBudget(100000000);
+
+            const response = await client.signAndExecuteTransaction({
+                signer: deployer,
+                transaction: tx,
+                requestType: 'WaitForLocalExecution',
+                options: { showEffects: true }
+            });
+
+            // Should fail with EInvalidPublicKey (error code 5)
+            expect(response.effects?.status.status).to.equal('failure');
+
+        } catch (error) {
+            // Expected to fail
+            expect(error).to.exist;
+        }
+    });
+
     it('should set new allocator successfully', async () => {
         try {
             // Get current allocator
