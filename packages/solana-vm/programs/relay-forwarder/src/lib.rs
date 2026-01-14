@@ -52,6 +52,7 @@ pub mod relay_forwarder {
     }
 
     /// Forwards spl tokens from the forwarder token account to the relay depository vault token account
+    /// Should be called within the same tx that creates the forwarder's ATA
     pub fn forward_token(ctx: Context<ForwardToken>, id: [u8; 32]) -> Result<()> {
         let amount = ctx.accounts.forwarder_token_account.amount;
         require!(amount > 0, ForwarderError::InsufficientBalance);
