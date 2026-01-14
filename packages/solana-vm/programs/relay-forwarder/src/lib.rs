@@ -86,7 +86,8 @@ pub mod relay_forwarder {
                 authority: ctx.accounts.forwarder.to_account_info(),
             },
             seeds,
-        )account(close_account_cpi_ctx)?;
+        )
+        close_account(close_account_cpi_ctx)?;
 
         Ok(())
     }
