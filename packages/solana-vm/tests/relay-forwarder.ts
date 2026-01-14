@@ -520,4 +520,163 @@ describe("Relay Forwarder", () => {
       assert.include(err.message, "Insufficient balance");
     }
   });
+
+  it("Forward token with rent recipient", async () => {
+    // Generate a unique ID for this forward
+    const id = Array.from(anchor.web3.Keypair.generate().publicKey.toBytes());
+
+    const [forwarderPda] = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("relay_forwarder")],
+      forwarderProgram.programId
+    );
+
+    const forwarderAta = await getAssociatedTokenAddress(
+      mint, 
+      forwarderPda, 
+      true
+    );
+
+    const depositAmount = 1_000_000;
+
+    // To be used in close_account
+    const rentRecipient = anchor.web3.Keypair.generate();
+
+    // Fund recipient to prevent any edge cases with close_account to empty accounts
+    await provider.connection.confirmTransaction(
+      await provider.connection.requestAirdrop(
+        rentRecipient.publicKey,
+        1_000_000 // 0.001 SOL
+      ),
+      "confirmed"
+    );
+
+    // Create PDA's token account and transfer tokens to it
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction()
+        .add(
+          createAssociatedTokenAccountInstruction(
+            sender.publicKey,
+            forwarderAta,
+            forwarderPda,
+            mint
+          )
+        )
+        .add(
+          createTransferInstruction(
+            senderAta,
+            forwarderAta,
+            sender.publicKey,
+            depositAmount
+          )
+        )
+    );
+
+    // Get initial balances
+    const rentRecipientLamportsBefore = await provider.connection.getBalance(
+      rentRecipient.publicKey,
+      "confirmed"
+    );
+
+    const vaultTokenBalanceBefore = await provider.connection
+      .getTokenAccountBalance(vaultAta)
+      .then((res) => res.value.amount)
+      .catch(() => "0");
+
+    const forwarderTokenBalanceBefore = await provider.connection
+      .getTokenAccountBalance(forwarderAta)
+      .then((res) => res.value.amount)
+      .catch(() => "0");
+
+    const forwardDepositTx = await forwarderProgram.methods
+      .forwardToken(id)
+      .accountsPartial({
+        sender: sender.publicKey,
+        depositor: depositor.publicKey,
+        relayDepository,
+        relayVault: vault,
+        mint,
+        forwarderTokenAccount: forwarderAta,
+        relayVaultTokenAccount: vaultAta,
+        relayDepositoryProgram: depositoryProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .remainingAccounts([
+        {
+          pubkey: rentRecipient.publicKey,
+          isSigner: false,  
+          isWritable: true, 
+        },
+      ])
+      .rpc();
+
+    // Wait for transaction confirmation
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    const depositTxTransaction = await provider.connection.getParsedTransaction(
+      forwardDepositTx,
+      {
+        commitment: "confirmed",
+      }
+    );
+    let events: any[] = [];
+    for (const logMessage of depositTxTransaction?.meta?.logMessages || []) {
+      if (!logMessage.startsWith("Program data: ")) {
+        continue;
+      }
+      const event = depositoryProgram.coder.events.decode(
+        logMessage.slice("Program data: ".length)
+      );
+      if (event) {
+        events.push(event);
+      }
+    }
+
+    const DepositEvent = events.find((event) => event.name === "depositEvent");
+    assert.exists(DepositEvent);
+
+    assert.equal(DepositEvent?.data.amount.toNumber(), depositAmount);
+    assert.equal(
+      DepositEvent?.data.depositor.toBase58(),
+      depositor.publicKey.toBase58()
+    );
+    assert.equal(DepositEvent?.data.id.toString(), id.toString());
+    assert.equal(DepositEvent?.data.token.toBase58(), mint.toBase58());
+
+    // Verify rentRecipient received lamports from closing
+    const rentRecipientLamportsAfter = await provider.connection.getBalance(
+      rentRecipient.publicKey,
+      "confirmed"
+    );
+
+    assert.isAbove(
+      rentRecipientLamportsAfter,
+      rentRecipientLamportsBefore,
+      "Rent recipient should receive lamports from CloseAccount"
+    );
+
+    // Verify token balances
+    const vaultTokenBalanceAfter = await provider.connection
+      .getTokenAccountBalance(vaultAta)
+      .then((res) => res.value.amount);
+
+    const forwarderTokenBalanceAfter = await provider.connection
+      .getTokenAccountBalance(forwarderAta)
+      .then((res) => res.value.amount)
+      .catch(() => "0");
+
+    // Check vault received all tokens
+    assert.equal(
+      Number(forwarderTokenBalanceBefore),
+      Number(vaultTokenBalanceAfter) - Number(vaultTokenBalanceBefore),
+      "Vault should receive all tokens from forwarder"
+    );
+
+    // Check forwarder sent all tokens
+    assert.equal(
+      Number(forwarderTokenBalanceAfter),
+      0,
+      "Forwarder should have 0 tokens after transfer"
+    );
+  });
 });

@@ -68,16 +68,25 @@ pub mod relay_forwarder {
             id,
         )?;
 
+        let rent_fee_payer = ctx.remaining_accounts.get(0);
+
+        let destination_info: AccountInfo<'info> = match rent_fee_payer {
+            Some(account) => {
+                require!(account.is_writable, ForwarderError::RentRecipientMustBeWritable);
+                account.clone()
+            }
+            None => ctx.accounts.sender.to_account_info(),
+        };
+
         let close_account_cpi_ctx = CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
             CloseAccount {
                 account: ctx.accounts.forwarder_token_account.to_account_info(),
-                destination: ctx.accounts.sender.to_account_info(),
+                destination: destination_info,
                 authority: ctx.accounts.forwarder.to_account_info(),
             },
             seeds,
-        );
-        close_account(close_account_cpi_ctx)?;
+        )account(close_account_cpi_ctx)?;
 
         Ok(())
     }
@@ -209,4 +218,6 @@ impl<'info> ForwardToken<'info> {
 pub enum ForwarderError {
     #[msg("Insufficient balance")]
     InsufficientBalance,
+    #[msg("Rent recipient must be writable")]
+    RentRecipientMustBeWritable,
 }
