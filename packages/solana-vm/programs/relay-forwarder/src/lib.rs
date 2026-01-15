@@ -15,7 +15,7 @@ const RELAY_FORWARDER_SEED: &[u8] = b"relay_forwarder";
 // Program ID
 //----------------------------------------
 
-declare_id!("DPArtTLbEqa6EuXHfL5UFLBZhFjiEXWRudhvXDrjwXUr");
+declare_id!("Brjhojay2oUjBrrqmE2GmUKEutbeDzDztQQsB9T3FsUj");
 
 //----------------------------------------
 // Program Module
@@ -53,7 +53,10 @@ pub mod relay_forwarder {
 
     /// Forwards spl tokens from the forwarder token account to the relay depository vault token account
     /// Should be called within the same tx that creates the forwarder's ATA
-    pub fn forward_token(ctx: Context<ForwardToken>, id: [u8; 32]) -> Result<()> {
+    pub fn forward_token<'info>(
+        ctx: Context<'_, '_, '_, 'info, ForwardToken<'info>>,
+        id: [u8; 32],
+    ) -> Result<()> {
         let amount = ctx.accounts.forwarder_token_account.amount;
         require!(amount > 0, ForwarderError::InsufficientBalance);
 

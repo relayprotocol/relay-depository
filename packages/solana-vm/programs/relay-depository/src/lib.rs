@@ -44,7 +44,7 @@ const DOMAIN_VERSION: &[u8] = b"1";
 // Program ID
 //----------------------------------------
 
-declare_id!("99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2");
+declare_id!("5CdJurnC4uskc9fyUqPmsWZJcwc7XzyLrEWRanUtDYJT");
 
 //----------------------------------------
 // Program Module
