@@ -14,10 +14,12 @@ relay_depository = "99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2"
 relay_forwarder = "DPArtTLbEqa6EuXHfL5UFLBZhFjiEXWRudhvXDrjwXUr"
 
 [programs.localnet]
-relay_depository = "5CdJurnC4uskc9fyUqPmsWZJcwc7XzyLrEWRanUtDYJT"
-relay_forwarder = "Brjhojay2oUjBrrqmE2GmUKEutbeDzDztQQsB9T3FsUj"
+relay_depository = "EvzSEbsL62xTbnPUuXfB6dwhdAxkgm6wqTAei53XYWjJ"
+relay_forwarder = "G67218pYuajgSWAFa5qDgxFJDAc41NTbLfLEz46WQ9M6"
+deposit_address = "CMEh4xH7ercsXoyRC2QFTgqEjECCkkS7oSmj7qvPw8MX"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
 test-forwarder = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/relay-forwarder.ts"
 test-depository = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/relay-depository.ts"
+test-deposit-address = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/deposit-address.ts"
