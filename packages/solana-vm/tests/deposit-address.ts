@@ -25,11 +25,48 @@ describe("Deposit Address", () => {
   );
   const fakeOwner = Keypair.generate();
   const newOwner = Keypair.generate();
+  const depositor = Keypair.generate();
 
   // PDAs
   let configPDA: PublicKey;
   let relayDepositoryPDA: PublicKey;
   let vaultPDA: PublicKey;
+
+  const getDepositAddress = (
+    id: number[],
+    token: PublicKey = PublicKey.default
+  ): [PublicKey, number] => {
+    return PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("deposit_address"),
+        Buffer.from(id),
+        token.toBuffer(),
+      ],
+      depositAddressProgram.programId
+    );
+  };
+
+  const getEvents = async (signature: string) => {
+    await provider.connection.confirmTransaction(signature);
+    const tx = await provider.connection.getParsedTransaction(
+      signature,
+      "confirmed"
+    );
+
+    let events: anchor.Event[] = [];
+    for (const logMessage of tx?.meta?.logMessages || []) {
+      if (!logMessage.startsWith("Program data: ")) {
+        continue;
+      }
+      const event = relayDepositoryProgram.coder.events.decode(
+        logMessage.slice("Program data: ".length)
+      );
+      if (event) {
+        events.push(event);
+      }
+    }
+    return events;
+  };
 
   before(async () => {
     // Airdrop SOL to test accounts
@@ -194,5 +231,118 @@ describe("Deposit Address", () => {
       configPDA
     );
     assert.ok(configAfterReset.owner.equals(owner.publicKey));
+  });
+
+  it("Sweep native", async () => {
+    const id = Array.from(Keypair.generate().publicKey.toBytes());
+    const [depositAddress] = getDepositAddress(id);
+
+    const depositAmount = 1 * LAMPORTS_PER_SOL;
+
+    // Fund the deposit address PDA with SOL
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: provider.wallet.publicKey,
+          toPubkey: depositAddress,
+          lamports: depositAmount,
+        })
+      )
+    );
+
+    // Get initial vault balance
+    const vaultBalanceBefore = await provider.connection.getBalance(vaultPDA);
+
+    // Get rent-exempt minimum for the deposit address
+    const rentExemptMinimum =
+      await provider.connection.getMinimumBalanceForRentExemption(0);
+
+    // Sweep native SOL
+    const sweepTx = await depositAddressProgram.methods
+      .sweepNative(id)
+      .accountsPartial({
+        config: configPDA,
+        depositAddress,
+        depositor: depositor.publicKey,
+        relayDepository: relayDepositoryPDA,
+        vault: vaultPDA,
+        relayDepositoryProgram: relayDepositoryProgram.programId,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Verify vault received the SOL
+    const vaultBalanceAfter = await provider.connection.getBalance(vaultPDA);
+    const expectedAmount = depositAmount - rentExemptMinimum;
+    assert.equal(
+      vaultBalanceAfter - vaultBalanceBefore,
+      expectedAmount
+    );
+
+    // Verify deposit address has only rent remaining
+    const depositAddressBalance = await provider.connection.getBalance(
+      depositAddress
+    );
+    assert.equal(depositAddressBalance, rentExemptMinimum);
+
+    // Verify DepositEvent
+    const events = await getEvents(sweepTx);
+    const depositEvent = events.find((e) => e.name === "depositEvent");
+    assert.exists(depositEvent);
+    assert.equal(depositEvent?.data.amount.toNumber(), expectedAmount);
+    assert.equal(
+      depositEvent?.data.depositor.toBase58(),
+      depositor.publicKey.toBase58()
+    );
+    assert.equal(depositEvent?.data.id.toString(), id.toString());
+  });
+
+  it("Should fail sweep native with insufficient balance", async () => {
+    const id = Array.from(Keypair.generate().publicKey.toBytes());
+    const [depositAddress] = getDepositAddress(id);
+
+    // Fund deposit address with only rent-exempt minimum
+    const rentExemptMinimum =
+      await provider.connection.getMinimumBalanceForRentExemption(0);
+
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: provider.wallet.publicKey,
+          toPubkey: depositAddress,
+          lamports: rentExemptMinimum,
+        })
+      )
+    );
+
+    try {
+      await depositAddressProgram.methods
+        .sweepNative(id)
+        .accountsPartial({
+          config: configPDA,
+          depositAddress,
+          depositor: depositor.publicKey,
+          relayDepository: relayDepositoryPDA,
+          vault: vaultPDA,
+          relayDepositoryProgram: relayDepositoryProgram.programId,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+      assert.fail("Should have thrown error");
+    } catch (err) {
+      assert.include(err.message, "Insufficient balance");
+    }
+  });
+
+  it("Sweep native with different IDs produces different deposit addresses", async () => {
+    const id1 = Array.from(Keypair.generate().publicKey.toBytes());
+    const id2 = Array.from(Keypair.generate().publicKey.toBytes());
+    const [depositAddress1] = getDepositAddress(id1);
+    const [depositAddress2] = getDepositAddress(id2);
+
+    assert.notEqual(
+      depositAddress1.toBase58(),
+      depositAddress2.toBase58()
+    );
   });
 });

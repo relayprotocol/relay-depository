@@ -93,6 +93,19 @@ anchor test
 
 ## Case 1: Test Validator Not Started
 
+## Generate Doc
+```
+cd packages/solana-vm
+
+# Generate json docs
+RUSTDOCFLAGS="-Z unstable-options --output-format json" \
+cargo doc --no-deps \
+
+# Convert json doc to single markdown file
+rustdoc-md --path target/doc/relay_depository.json \
+--output relay_depository.md \
+```
+
 ### Error Message
 
 ```
