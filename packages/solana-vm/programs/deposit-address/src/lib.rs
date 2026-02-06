@@ -1,4 +1,8 @@
 use anchor_lang::prelude::*;
+use anchor_spl::{
+    associated_token::AssociatedToken,
+    token_interface::{close_account, CloseAccount, Mint, TokenAccount, TokenInterface},
+};
 use relay_depository::program::RelayDepository;
 
 ///
@@ -76,8 +80,8 @@ pub mod deposit_address {
 
     /// Sweep native SOL from a deposit address PDA to the relay depository vault
     ///
-    /// Transfers SOL from the deposit address PDA to the vault via CPI call
-    /// to relay_depository::deposit_native. Leaves rent-exempt minimum in the PDA.
+    /// Transfers full SOL balance from the deposit address PDA to the vault via CPI call
+    /// to relay_depository::deposit_native.
     ///
     /// # Parameters
     /// * `ctx` - The context containing the accounts
@@ -88,17 +92,15 @@ pub mod deposit_address {
     pub fn sweep_native(ctx: Context<SweepNative>, id: [u8; 32]) -> Result<()> {
         let amount = ctx.accounts.deposit_address.lamports();
 
-        let rent = Rent::get()?;
-        let min_rent = rent.minimum_balance(0);
-
-        // Check that the deposit address has more than the minimum required amount
-        require!(amount > min_rent, DepositAddressError::InsufficientBalance);
+        require!(amount > 0, DepositAddressError::InsufficientBalance);
 
         let token_bytes = Pubkey::default().to_bytes();
+        let depositor_bytes = ctx.accounts.depositor.key().to_bytes();
         let seeds: &[&[&[u8]]] = &[&[
             DEPOSIT_ADDRESS_SEED,
             &id[..],
             &token_bytes,
+            &depositor_bytes,
             &[ctx.bumps.deposit_address],
         ]];
 
@@ -108,9 +110,61 @@ pub mod deposit_address {
                 ctx.accounts.into_deposit_native_accounts(),
                 seeds,
             ),
-            amount - min_rent,
+            amount,
             id,
         )?;
+
+        Ok(())
+    }
+
+    /// Sweep SPL tokens from a deposit address PDA to the relay depository vault
+    ///
+    /// Transfers tokens from the deposit address PDA's token account to the vault's
+    /// token account via CPI call to relay_depository::deposit_token, then closes
+    /// the deposit address's token account and returns rent to the depositor.
+    ///
+    /// # Parameters
+    /// * `ctx` - The context containing the accounts
+    /// * `id` - The unique identifier (32 bytes)
+    ///
+    /// # Returns
+    /// * `Ok(())` on success
+    pub fn sweep_token(ctx: Context<SweepToken>, id: [u8; 32]) -> Result<()> {
+        let amount = ctx.accounts.deposit_address_token_account.amount;
+
+        require!(amount > 0, DepositAddressError::InsufficientBalance);
+
+        let mint_key = ctx.accounts.mint.key();
+        let mint_bytes = mint_key.to_bytes();
+        let depositor_bytes = ctx.accounts.depositor.key().to_bytes();
+        let seeds: &[&[&[u8]]] = &[&[
+            DEPOSIT_ADDRESS_SEED,
+            &id[..],
+            &mint_bytes,
+            &depositor_bytes,
+            &[ctx.bumps.deposit_address],
+        ]];
+
+        relay_depository::cpi::deposit_token(
+            CpiContext::new_with_signer(
+                ctx.accounts.relay_depository_program.to_account_info(),
+                ctx.accounts.into_deposit_token_accounts(),
+                seeds,
+            ),
+            amount,
+            id,
+        )?;
+
+        // Close the deposit address token account, return rent to depositor
+        close_account(CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            CloseAccount {
+                account: ctx.accounts.deposit_address_token_account.to_account_info(),
+                destination: ctx.accounts.depositor.to_account_info(),
+                authority: ctx.accounts.deposit_address.to_account_info(),
+            },
+            seeds,
+        ))?;
 
         Ok(())
     }
@@ -159,13 +213,13 @@ pub struct Initialize<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
 
-    /// CHECK: Validated as relay_depository PDA
+    /// CHECK: Stored in config, validated during sweep via has_one
     pub relay_depository: UncheckedAccount<'info>,
 
     /// The relay depository program
     pub relay_depository_program: Program<'info, RelayDepository>,
 
-    /// CHECK: Validated as vault PDA
+    /// CHECK: Stored in config, validated during sweep via has_one
     pub vault: UncheckedAccount<'info>,
 
     /// The system program
@@ -200,16 +254,16 @@ pub struct SweepNative<'info> {
     )]
     pub config: Account<'info, DepositAddressConfig>,
 
-    /// CHECK: Deposit address PDA derived from id and default token
+    /// CHECK: Depositor address, used in PDA derivation and event emission
+    pub depositor: UncheckedAccount<'info>,
+
+    /// CHECK: Deposit address PDA derived from id, token, and depositor
     #[account(
         mut,
-        seeds = [DEPOSIT_ADDRESS_SEED, &id[..], &Pubkey::default().to_bytes()],
+        seeds = [DEPOSIT_ADDRESS_SEED, &id[..], &Pubkey::default().to_bytes(), depositor.key().as_ref()],
         bump
     )]
     pub deposit_address: UncheckedAccount<'info>,
-
-    /// CHECK: Used as public key only for event emission
-    pub depositor: UncheckedAccount<'info>,
 
     /// CHECK: Validated via config.has_one
     pub relay_depository: UncheckedAccount<'info>,
@@ -237,6 +291,88 @@ impl<'info> SweepNative<'info> {
             sender: self.deposit_address.to_account_info(),
             depositor: self.depositor.to_account_info(),
             vault: self.vault.to_account_info(),
+            system_program: self.system_program.to_account_info(),
+        }
+    }
+}
+
+/// Accounts required for sweeping SPL tokens from a deposit address
+#[derive(Accounts)]
+#[instruction(id: [u8; 32])]
+pub struct SweepToken<'info> {
+    /// The configuration account
+    #[account(
+        seeds = [CONFIG_SEED],
+        bump,
+        has_one = relay_depository,
+        has_one = vault,
+    )]
+    pub config: Account<'info, DepositAddressConfig>,
+
+    /// CHECK: Depositor address, used in PDA derivation, event emission, and receives ATA rent
+    #[account(mut)]
+    pub depositor: UncheckedAccount<'info>,
+
+    /// CHECK: Deposit address PDA derived from id, mint, and depositor
+    #[account(
+        mut,
+        seeds = [DEPOSIT_ADDRESS_SEED, &id[..], &mint.key().to_bytes(), depositor.key().as_ref()],
+        bump
+    )]
+    pub deposit_address: UncheckedAccount<'info>,
+
+    /// The token mint
+    pub mint: InterfaceAccount<'info, Mint>,
+
+    /// The deposit address's token account
+    #[account(
+        mut,
+        associated_token::mint = mint,
+        associated_token::authority = deposit_address,
+        associated_token::token_program = token_program
+    )]
+    pub deposit_address_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    /// CHECK: Validated via config.has_one
+    pub relay_depository: UncheckedAccount<'info>,
+
+    /// CHECK: Validated via config.has_one
+    pub vault: UncheckedAccount<'info>,
+
+    /// CHECK: May need to be created by relay_depository
+    #[account(mut)]
+    pub vault_token_account: UncheckedAccount<'info>,
+
+    /// The relay depository program
+    #[account(
+        constraint = relay_depository_program.key() == config.relay_depository_program
+    )]
+    pub relay_depository_program: Program<'info, RelayDepository>,
+
+    /// The token program
+    pub token_program: Interface<'info, TokenInterface>,
+
+    /// The associated token program
+    pub associated_token_program: Program<'info, AssociatedToken>,
+
+    /// The system program
+    pub system_program: Program<'info, System>,
+}
+
+impl<'info> SweepToken<'info> {
+    /// Converts `SweepToken` accounts into `relay_depository::cpi::accounts::DepositToken`
+    /// accounts for use in cross-program-invocation calls to the `relay_depository` program
+    fn into_deposit_token_accounts(&self) -> relay_depository::cpi::accounts::DepositToken<'info> {
+        relay_depository::cpi::accounts::DepositToken {
+            relay_depository: self.relay_depository.to_account_info(),
+            sender: self.deposit_address.to_account_info(),
+            depositor: self.depositor.to_account_info(),
+            vault: self.vault.to_account_info(),
+            mint: self.mint.to_account_info(),
+            sender_token_account: self.deposit_address_token_account.to_account_info(),
+            vault_token_account: self.vault_token_account.to_account_info(),
+            token_program: self.token_program.to_account_info(),
+            associated_token_program: self.associated_token_program.to_account_info(),
             system_program: self.system_program.to_account_info(),
         }
     }
