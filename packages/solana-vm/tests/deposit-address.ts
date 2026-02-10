@@ -49,7 +49,6 @@ describe("Deposit Address", () => {
   let mint2022: PublicKey;
   let vaultTokenAccount: PublicKey;
   let vault2022TokenAccount: PublicKey;
-  const executor = Keypair.generate();
 
   const getDepositAddress = (
     id: number[],
@@ -67,21 +66,31 @@ describe("Deposit Address", () => {
     );
   };
 
+  const getAllowedProgramPDA = (programId: PublicKey): [PublicKey, number] => {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("allowed_program"), programId.toBuffer()],
+      depositAddressProgram.programId
+    );
+  };
+
   const getEvents = async (signature: string) => {
     await provider.connection.confirmTransaction(signature);
-    const tx = await provider.connection.getParsedTransaction(
-      signature,
-      "confirmed"
-    );
+    let tx: Awaited<ReturnType<typeof provider.connection.getParsedTransaction>> = null;
+    for (let i = 0; i < 10; i++) {
+      tx = await provider.connection.getParsedTransaction(signature, "confirmed");
+      if (tx?.meta?.logMessages) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
 
     let events: anchor.Event[] = [];
     for (const logMessage of tx?.meta?.logMessages || []) {
       if (!logMessage.startsWith("Program data: ")) {
         continue;
       }
-      const event = relayDepositoryProgram.coder.events.decode(
-        logMessage.slice("Program data: ".length)
-      );
+      const data = logMessage.slice("Program data: ".length);
+      const event =
+        depositAddressProgram.coder.events.decode(data) ||
+        relayDepositoryProgram.coder.events.decode(data);
       if (event) {
         events.push(event);
       }
@@ -95,7 +104,6 @@ describe("Deposit Address", () => {
       provider.connection.requestAirdrop(owner.publicKey, 10 * LAMPORTS_PER_SOL),
       provider.connection.requestAirdrop(fakeOwner.publicKey, 2 * LAMPORTS_PER_SOL),
       provider.connection.requestAirdrop(newOwner.publicKey, 2 * LAMPORTS_PER_SOL),
-      provider.connection.requestAirdrop(executor.publicKey, 2 * LAMPORTS_PER_SOL),
       provider.connection.requestAirdrop(depositor.publicKey, 2 * LAMPORTS_PER_SOL),
     ];
 
@@ -191,7 +199,7 @@ describe("Deposit Address", () => {
   });
 
   it("Should initialize config successfully", async () => {
-    await depositAddressProgram.methods
+    const tx = await depositAddressProgram.methods
       .initialize()
       .accountsPartial({
         config: configPDA,
@@ -212,6 +220,14 @@ describe("Deposit Address", () => {
     assert.ok(config.relayDepository.equals(relayDepositoryPDA));
     assert.ok(config.relayDepositoryProgram.equals(relayDepositoryProgram.programId));
     assert.ok(config.vault.equals(vaultPDA));
+
+    const events = await getEvents(tx);
+    const initEvent = events.find((e) => e.name === "initializeEvent");
+    assert.exists(initEvent);
+    assert.equal(initEvent?.data.owner.toBase58(), owner.publicKey.toBase58());
+    assert.equal(initEvent?.data.relayDepository.toBase58(), relayDepositoryPDA.toBase58());
+    assert.equal(initEvent?.data.relayDepositoryProgram.toBase58(), relayDepositoryProgram.programId.toBase58());
+    assert.equal(initEvent?.data.vault.toBase58(), vaultPDA.toBase58());
   });
 
   it("Should fail to re-initialize already initialized contract", async () => {
@@ -257,7 +273,7 @@ describe("Deposit Address", () => {
   });
 
   it("Owner can set new owner", async () => {
-    await depositAddressProgram.methods
+    const tx = await depositAddressProgram.methods
       .setOwner(newOwner.publicKey)
       .accountsPartial({
         config: configPDA,
@@ -270,6 +286,12 @@ describe("Deposit Address", () => {
       configPDA
     );
     assert.ok(config.owner.equals(newOwner.publicKey));
+
+    const events = await getEvents(tx);
+    const setOwnerEvent = events.find((e) => e.name === "setOwnerEvent");
+    assert.exists(setOwnerEvent);
+    assert.equal(setOwnerEvent?.data.previousOwner.toBase58(), owner.publicKey.toBase58());
+    assert.equal(setOwnerEvent?.data.newOwner.toBase58(), newOwner.publicKey.toBase58());
 
     // Transfer back
     await depositAddressProgram.methods
@@ -285,6 +307,163 @@ describe("Deposit Address", () => {
       configPDA
     );
     assert.ok(configAfterReset.owner.equals(owner.publicKey));
+  });
+
+  it("Owner can add program to whitelist", async () => {
+    const [allowedProgramPDA] = getAllowedProgramPDA(SystemProgram.programId);
+
+    const tx = await depositAddressProgram.methods
+      .addAllowedProgram()
+      .accountsPartial({
+        config: configPDA,
+        owner: owner.publicKey,
+        programToAdd: SystemProgram.programId,
+        allowedProgram: allowedProgramPDA,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([owner])
+      .rpc();
+
+    const allowedProgram = await depositAddressProgram.account.allowedProgram.fetch(
+      allowedProgramPDA
+    );
+    assert.ok(allowedProgram.programId.equals(SystemProgram.programId));
+
+    const events = await getEvents(tx);
+    const addEvent = events.find((e) => e.name === "addAllowedProgramEvent");
+    assert.exists(addEvent);
+    assert.equal(addEvent?.data.programId.toBase58(), SystemProgram.programId.toBase58());
+  });
+
+  it("Non-owner cannot add program to whitelist", async () => {
+    const [allowedProgramPDA] = getAllowedProgramPDA(ASSOCIATED_TOKEN_PROGRAM_ID);
+
+    try {
+      await depositAddressProgram.methods
+        .addAllowedProgram()
+        .accountsPartial({
+          config: configPDA,
+          owner: fakeOwner.publicKey,
+          programToAdd: ASSOCIATED_TOKEN_PROGRAM_ID,
+          allowedProgram: allowedProgramPDA,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([fakeOwner])
+        .rpc();
+      assert.fail("Should have thrown error");
+    } catch (err) {
+      assert.include(err.message, "Unauthorized");
+    }
+  });
+
+  it("Owner can add TOKEN_PROGRAM_ID to whitelist", async () => {
+    const [allowedProgramPDA] = getAllowedProgramPDA(TOKEN_PROGRAM_ID);
+
+    await depositAddressProgram.methods
+      .addAllowedProgram()
+      .accountsPartial({
+        config: configPDA,
+        owner: owner.publicKey,
+        programToAdd: TOKEN_PROGRAM_ID,
+        allowedProgram: allowedProgramPDA,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([owner])
+      .rpc();
+
+    const allowedProgram = await depositAddressProgram.account.allowedProgram.fetch(
+      allowedProgramPDA
+    );
+    assert.ok(allowedProgram.programId.equals(TOKEN_PROGRAM_ID));
+  });
+
+  it("Cannot add same program twice", async () => {
+    const [allowedProgramPDA] = getAllowedProgramPDA(SystemProgram.programId);
+
+    try {
+      await depositAddressProgram.methods
+        .addAllowedProgram()
+        .accountsPartial({
+          config: configPDA,
+          owner: owner.publicKey,
+          programToAdd: SystemProgram.programId,
+          allowedProgram: allowedProgramPDA,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([owner])
+        .rpc();
+      assert.fail("Should have thrown error - program already added");
+    } catch (err) {
+      // Account already exists
+      assert.ok(true);
+    }
+  });
+
+  it("Owner can remove program from whitelist", async () => {
+    // Add a program first (must be executable)
+    const testProgram = ASSOCIATED_TOKEN_PROGRAM_ID;
+    const [allowedProgramPDA] = getAllowedProgramPDA(testProgram);
+
+    await depositAddressProgram.methods
+      .addAllowedProgram()
+      .accountsPartial({
+        config: configPDA,
+        owner: owner.publicKey,
+        programToAdd: testProgram,
+        allowedProgram: allowedProgramPDA,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([owner])
+      .rpc();
+
+    // Verify it was added
+    const allowedBefore = await depositAddressProgram.account.allowedProgram.fetch(
+      allowedProgramPDA
+    );
+    assert.ok(allowedBefore.programId.equals(testProgram));
+
+    // Remove it
+    const removeTx = await depositAddressProgram.methods
+      .removeAllowedProgram()
+      .accountsPartial({
+        config: configPDA,
+        owner: owner.publicKey,
+        allowedProgram: allowedProgramPDA,
+      })
+      .signers([owner])
+      .rpc();
+
+    // Verify it was removed
+    try {
+      await depositAddressProgram.account.allowedProgram.fetch(allowedProgramPDA);
+      assert.fail("Account should have been closed");
+    } catch (err) {
+      assert.ok(true);
+    }
+
+    const removeEvents = await getEvents(removeTx);
+    const removeEvent = removeEvents.find((e) => e.name === "removeAllowedProgramEvent");
+    assert.exists(removeEvent);
+    assert.equal(removeEvent?.data.programId.toBase58(), testProgram.toBase58());
+  });
+
+  it("Non-owner cannot remove program from whitelist", async () => {
+    const [allowedProgramPDA] = getAllowedProgramPDA(SystemProgram.programId);
+
+    try {
+      await depositAddressProgram.methods
+        .removeAllowedProgram()
+        .accountsPartial({
+          config: configPDA,
+          owner: fakeOwner.publicKey,
+          allowedProgram: allowedProgramPDA,
+        })
+        .signers([fakeOwner])
+        .rpc();
+      assert.fail("Should have thrown error");
+    } catch (err) {
+      assert.include(err.message, "Unauthorized");
+    }
   });
 
   it("Sweep native", async () => {
@@ -331,7 +510,7 @@ describe("Deposit Address", () => {
     );
     assert.equal(depositAddressBalance, 0);
 
-    // Verify DepositEvent
+    // Verify DepositEvent (from relay_depository CPI)
     const events = await getEvents(sweepTx);
     const depositEvent = events.find((e) => e.name === "depositEvent");
     assert.exists(depositEvent);
@@ -341,6 +520,14 @@ describe("Deposit Address", () => {
       depositor.publicKey.toBase58()
     );
     assert.equal(depositEvent?.data.id.toString(), id.toString());
+
+    // Verify SweepNativeEvent (from deposit-address)
+    const sweepEvent = events.find((e) => e.name === "sweepNativeEvent");
+    assert.exists(sweepEvent);
+    assert.equal(sweepEvent?.data.amount.toNumber(), depositAmount);
+    assert.equal(sweepEvent?.data.depositor.toBase58(), depositor.publicKey.toBase58());
+    assert.equal(sweepEvent?.data.depositAddress.toBase58(), depositAddress.toBase58());
+    assert.equal(sweepEvent?.data.id.toString(), id.toString());
   });
 
   it("Should fail sweep native with zero balance", async () => {
@@ -498,7 +685,7 @@ describe("Deposit Address", () => {
       assert.ok(true);
     }
 
-    // Verify DepositEvent
+    // Verify DepositEvent (from relay_depository CPI)
     const events = await getEvents(sweepTx);
     const depositEvent = events.find((e) => e.name === "depositEvent");
     assert.exists(depositEvent);
@@ -509,6 +696,15 @@ describe("Deposit Address", () => {
     );
     assert.equal(depositEvent?.data.id.toString(), id.toString());
     assert.equal(depositEvent?.data.token.toBase58(), mint.toBase58());
+
+    // Verify SweepTokenEvent (from deposit-address)
+    const sweepEvent = events.find((e) => e.name === "sweepTokenEvent");
+    assert.exists(sweepEvent);
+    assert.equal(sweepEvent?.data.amount.toNumber(), depositAmount);
+    assert.equal(sweepEvent?.data.depositor.toBase58(), depositor.publicKey.toBase58());
+    assert.equal(sweepEvent?.data.depositAddress.toBase58(), depositAddress.toBase58());
+    assert.equal(sweepEvent?.data.mint.toBase58(), mint.toBase58());
+    assert.equal(sweepEvent?.data.id.toString(), id.toString());
   });
 
   it("Sweep token2022", async () => {
@@ -621,12 +817,18 @@ describe("Deposit Address", () => {
       .then((res) => Number(res.value.amount));
     assert.equal(vaultBalanceAfter - vaultBalanceBefore, depositAmount);
 
-    // Verify DepositEvent
+    // Verify DepositEvent (from relay_depository CPI)
     const events = await getEvents(sweepTx);
     const depositEvent = events.find((e) => e.name === "depositEvent");
     assert.exists(depositEvent);
     assert.equal(depositEvent?.data.amount.toNumber(), depositAmount);
     assert.equal(depositEvent?.data.token.toBase58(), mint2022.toBase58());
+
+    // Verify SweepTokenEvent (from deposit-address)
+    const sweepEvent = events.find((e) => e.name === "sweepTokenEvent");
+    assert.exists(sweepEvent);
+    assert.equal(sweepEvent?.data.amount.toNumber(), depositAmount);
+    assert.equal(sweepEvent?.data.mint.toBase58(), mint2022.toBase58());
   });
 
   it("Should fail sweep token with zero balance", async () => {
@@ -816,6 +1018,448 @@ describe("Deposit Address", () => {
       assert.fail("Should have thrown error");
     } catch (err) {
       assert.include(err.message, "ConstraintSeeds");
+    }
+  });
+
+  it("Owner can execute CPI from deposit address", async () => {
+    const id = Array.from(Keypair.generate().publicKey.toBytes());
+    const token = PublicKey.default;
+    const [depositAddress] = getDepositAddress(id, token);
+    const [allowedProgramPDA] = getAllowedProgramPDA(SystemProgram.programId);
+
+    const depositAmount = 1 * LAMPORTS_PER_SOL;
+    const transferAmount = 0.5 * LAMPORTS_PER_SOL;
+
+    // Fund the deposit address PDA with SOL
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: provider.wallet.publicKey,
+          toPubkey: depositAddress,
+          lamports: depositAmount,
+        })
+      )
+    );
+
+    // Get initial recipient balance
+    const recipient = Keypair.generate();
+    const recipientBalanceBefore = await provider.connection.getBalance(
+      recipient.publicKey
+    );
+
+    // Build transfer instruction data (SystemProgram.transfer)
+    // Instruction index 2 = Transfer, followed by u64 amount (little endian)
+    const instructionData = Buffer.alloc(12);
+    instructionData.writeUInt32LE(2, 0); // Transfer instruction
+    instructionData.writeBigUInt64LE(BigInt(transferAmount), 4);
+
+    // Execute transfer via owner (SystemProgram is already whitelisted)
+    const executeTx = await depositAddressProgram.methods
+      .execute(
+        id,
+        token,
+        depositor.publicKey,
+        instructionData
+      )
+      .accountsPartial({
+        config: configPDA,
+        owner: owner.publicKey,
+        depositAddress,
+        allowedProgram: allowedProgramPDA,
+        targetProgram: SystemProgram.programId,
+      })
+      .remainingAccounts([
+        { pubkey: depositAddress, isSigner: false, isWritable: true },
+        { pubkey: recipient.publicKey, isSigner: false, isWritable: true },
+      ])
+      .signers([owner])
+      .rpc();
+
+    // Verify recipient received the SOL
+    const recipientBalanceAfter = await provider.connection.getBalance(
+      recipient.publicKey
+    );
+    assert.equal(recipientBalanceAfter - recipientBalanceBefore, transferAmount);
+
+    // Verify ExecuteEvent
+    const events = await getEvents(executeTx);
+    const executeEvent = events.find((e) => e.name === "executeEvent");
+    assert.exists(executeEvent);
+    assert.equal(executeEvent?.data.id.toString(), id.toString());
+    assert.equal(executeEvent?.data.token.toBase58(), token.toBase58());
+    assert.equal(executeEvent?.data.depositor.toBase58(), depositor.publicKey.toBase58());
+    assert.equal(executeEvent?.data.targetProgram.toBase58(), SystemProgram.programId.toBase58());
+  });
+
+  it("Non-owner cannot execute CPI", async () => {
+    const id = Array.from(Keypair.generate().publicKey.toBytes());
+    const token = PublicKey.default;
+    const [depositAddress] = getDepositAddress(id, token);
+    const [allowedProgramPDA] = getAllowedProgramPDA(SystemProgram.programId);
+
+    // Fund the deposit address PDA with SOL
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: provider.wallet.publicKey,
+          toPubkey: depositAddress,
+          lamports: 0.1 * LAMPORTS_PER_SOL,
+        })
+      )
+    );
+
+    const instructionData = Buffer.alloc(12);
+    instructionData.writeUInt32LE(2, 0);
+    instructionData.writeBigUInt64LE(BigInt(0.05 * LAMPORTS_PER_SOL), 4);
+
+    try {
+      await depositAddressProgram.methods
+        .execute(
+          id,
+          token,
+          depositor.publicKey,
+          instructionData
+        )
+        .accountsPartial({
+          config: configPDA,
+          owner: fakeOwner.publicKey,
+          depositAddress,
+          allowedProgram: allowedProgramPDA,
+          targetProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: depositAddress, isSigner: false, isWritable: true },
+          { pubkey: Keypair.generate().publicKey, isSigner: false, isWritable: true },
+        ])
+        .signers([fakeOwner])
+        .rpc();
+      assert.fail("Should have thrown error");
+    } catch (err) {
+      assert.include(err.message, "Unauthorized");
+    }
+  });
+
+  it("Execute fails with wrong token parameter", async () => {
+    const id = Array.from(Keypair.generate().publicKey.toBytes());
+    const token = PublicKey.default;
+    const wrongToken = mint; // Use SPL token instead of native
+    const [depositAddress] = getDepositAddress(id, token);
+    const [allowedProgramPDA] = getAllowedProgramPDA(SystemProgram.programId);
+
+    // Fund the deposit address
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: provider.wallet.publicKey,
+          toPubkey: depositAddress,
+          lamports: 0.1 * LAMPORTS_PER_SOL,
+        })
+      )
+    );
+
+    const instructionData = Buffer.alloc(12);
+    instructionData.writeUInt32LE(2, 0);
+    instructionData.writeBigUInt64LE(BigInt(0.01 * LAMPORTS_PER_SOL), 4);
+
+    try {
+      await depositAddressProgram.methods
+        .execute(
+          id,
+          wrongToken, // Wrong token parameter
+          depositor.publicKey,
+          instructionData
+        )
+        .accountsPartial({
+          config: configPDA,
+          owner: owner.publicKey,
+          depositAddress,
+          allowedProgram: allowedProgramPDA,
+          targetProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: depositAddress, isSigner: false, isWritable: true },
+          { pubkey: Keypair.generate().publicKey, isSigner: false, isWritable: true },
+        ])
+        .signers([owner])
+        .rpc();
+      assert.fail("Should have thrown error");
+    } catch (err) {
+      assert.include(err.message, "ConstraintSeeds");
+    }
+  });
+
+  it("Execute fails with wrong depositor parameter", async () => {
+    const id = Array.from(Keypair.generate().publicKey.toBytes());
+    const token = PublicKey.default;
+    const wrongDepositor = Keypair.generate();
+    const [depositAddress] = getDepositAddress(id, token);
+    const [allowedProgramPDA] = getAllowedProgramPDA(SystemProgram.programId);
+
+    // Fund the deposit address
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: provider.wallet.publicKey,
+          toPubkey: depositAddress,
+          lamports: 0.1 * LAMPORTS_PER_SOL,
+        })
+      )
+    );
+
+    const instructionData = Buffer.alloc(12);
+    instructionData.writeUInt32LE(2, 0);
+    instructionData.writeBigUInt64LE(BigInt(0.01 * LAMPORTS_PER_SOL), 4);
+
+    try {
+      await depositAddressProgram.methods
+        .execute(
+          id,
+          token,
+          wrongDepositor.publicKey, // Wrong depositor parameter
+          instructionData
+        )
+        .accountsPartial({
+          config: configPDA,
+          owner: owner.publicKey,
+          depositAddress,
+          allowedProgram: allowedProgramPDA,
+          targetProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: depositAddress, isSigner: false, isWritable: true },
+          { pubkey: Keypair.generate().publicKey, isSigner: false, isWritable: true },
+        ])
+        .signers([owner])
+        .rpc();
+      assert.fail("Should have thrown error");
+    } catch (err) {
+      assert.include(err.message, "ConstraintSeeds");
+    }
+  });
+
+  it("Execute can transfer SPL tokens", async () => {
+    const id = Array.from(Keypair.generate().publicKey.toBytes());
+    const [depositAddress] = getDepositAddress(id, mint);
+    const [allowedProgramPDA] = getAllowedProgramPDA(TOKEN_PROGRAM_ID);
+
+    const depositAmount = 1_000_000_000;
+    const transferAmount = 500_000_000;
+
+    // Create deposit address token account
+    const depositAddressTokenAccount = await getAssociatedTokenAddress(
+      mint,
+      depositAddress,
+      true
+    );
+
+    // Create owner's token account and mint tokens
+    let ownerTokenAccount: PublicKey;
+    try {
+      ownerTokenAccount = await createAssociatedTokenAccount(
+        provider.connection,
+        owner,
+        mint,
+        owner.publicKey
+      );
+    } catch {
+      ownerTokenAccount = await getAssociatedTokenAddress(mint, owner.publicKey);
+    }
+
+    await mintTo(
+      provider.connection,
+      owner,
+      mint,
+      ownerTokenAccount,
+      owner,
+      depositAmount
+    );
+
+    // Create deposit address ATA and transfer tokens
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction()
+        .add(
+          createAssociatedTokenAccountInstruction(
+            owner.publicKey,
+            depositAddressTokenAccount,
+            depositAddress,
+            mint
+          )
+        )
+        .add(
+          createTransferInstruction(
+            ownerTokenAccount,
+            depositAddressTokenAccount,
+            owner.publicKey,
+            depositAmount
+          )
+        ),
+      [owner]
+    );
+
+    // Create recipient token account
+    const recipient = Keypair.generate();
+    const recipientTokenAccount = await createAssociatedTokenAccount(
+      provider.connection,
+      owner,
+      mint,
+      recipient.publicKey
+    );
+
+    // Build SPL token transfer instruction data
+    // Instruction 3 = Transfer, amount as u64 little endian
+    const instructionData = Buffer.alloc(9);
+    instructionData.writeUInt8(3, 0); // Transfer instruction
+    instructionData.writeBigUInt64LE(BigInt(transferAmount), 1);
+
+    // Execute token transfer (TOKEN_PROGRAM_ID is already whitelisted)
+    await depositAddressProgram.methods
+      .execute(
+        id,
+        mint,
+        depositor.publicKey,
+        instructionData
+      )
+      .accountsPartial({
+        config: configPDA,
+        owner: owner.publicKey,
+        depositAddress,
+        allowedProgram: allowedProgramPDA,
+        targetProgram: TOKEN_PROGRAM_ID,
+      })
+      .remainingAccounts([
+        { pubkey: depositAddressTokenAccount, isSigner: false, isWritable: true },
+        { pubkey: recipientTokenAccount, isSigner: false, isWritable: true },
+        { pubkey: depositAddress, isSigner: false, isWritable: false },
+      ])
+      .signers([owner])
+      .rpc();
+
+    // Verify recipient received the tokens
+    const recipientBalance = await provider.connection.getTokenAccountBalance(
+      recipientTokenAccount
+    );
+    assert.equal(Number(recipientBalance.value.amount), transferAmount);
+  });
+
+  it("Execute can close token account", async () => {
+    const id = Array.from(Keypair.generate().publicKey.toBytes());
+    const [depositAddress] = getDepositAddress(id, mint);
+    const [allowedProgramPDA] = getAllowedProgramPDA(TOKEN_PROGRAM_ID);
+
+    // Create deposit address token account (empty)
+    const depositAddressTokenAccount = await getAssociatedTokenAddress(
+      mint,
+      depositAddress,
+      true
+    );
+
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction().add(
+        createAssociatedTokenAccountInstruction(
+          owner.publicKey,
+          depositAddressTokenAccount,
+          depositAddress,
+          mint
+        )
+      ),
+      [owner]
+    );
+
+    // Verify token account exists
+    const accountBefore = await getAccount(provider.connection, depositAddressTokenAccount);
+    assert.ok(accountBefore);
+
+    // Get depositor balance before
+    const depositorBalanceBefore = await provider.connection.getBalance(depositor.publicKey);
+
+    // Build close account instruction data
+    // Instruction 9 = CloseAccount
+    const instructionData = Buffer.alloc(1);
+    instructionData.writeUInt8(9, 0);
+
+    // Execute close account (TOKEN_PROGRAM_ID is already whitelisted)
+    await depositAddressProgram.methods
+      .execute(
+        id,
+        mint,
+        depositor.publicKey,
+        instructionData
+      )
+      .accountsPartial({
+        config: configPDA,
+        owner: owner.publicKey,
+        depositAddress,
+        allowedProgram: allowedProgramPDA,
+        targetProgram: TOKEN_PROGRAM_ID,
+      })
+      .remainingAccounts([
+        { pubkey: depositAddressTokenAccount, isSigner: false, isWritable: true },
+        { pubkey: depositor.publicKey, isSigner: false, isWritable: true },
+        { pubkey: depositAddress, isSigner: false, isWritable: false },
+      ])
+      .signers([owner])
+      .rpc();
+
+    // Verify token account is closed
+    try {
+      await getAccount(provider.connection, depositAddressTokenAccount);
+      assert.fail("Token account should have been closed");
+    } catch (err) {
+      assert.ok(true);
+    }
+
+    // Verify depositor received rent
+    const depositorBalanceAfter = await provider.connection.getBalance(depositor.publicKey);
+    assert.isAbove(depositorBalanceAfter, depositorBalanceBefore);
+  });
+
+  it("Execute fails with non-whitelisted program", async () => {
+    const id = Array.from(Keypair.generate().publicKey.toBytes());
+    const token = PublicKey.default;
+    const [depositAddress] = getDepositAddress(id, token);
+    const nonWhitelistedProgram = Keypair.generate().publicKey;
+    const [invalidAllowedProgramPDA] = getAllowedProgramPDA(nonWhitelistedProgram);
+
+    // Fund the deposit address
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: provider.wallet.publicKey,
+          toPubkey: depositAddress,
+          lamports: 0.1 * LAMPORTS_PER_SOL,
+        })
+      )
+    );
+
+    const instructionData = Buffer.alloc(12);
+    instructionData.writeUInt32LE(2, 0);
+    instructionData.writeBigUInt64LE(BigInt(0.01 * LAMPORTS_PER_SOL), 4);
+
+    try {
+      await depositAddressProgram.methods
+        .execute(
+          id,
+          token,
+          depositor.publicKey,
+          instructionData
+        )
+        .accountsPartial({
+          config: configPDA,
+          owner: owner.publicKey,
+          depositAddress,
+          allowedProgram: invalidAllowedProgramPDA,
+          targetProgram: nonWhitelistedProgram,
+        })
+        .remainingAccounts([
+          { pubkey: depositAddress, isSigner: false, isWritable: true },
+          { pubkey: Keypair.generate().publicKey, isSigner: false, isWritable: true },
+        ])
+        .signers([owner])
+        .rpc();
+      assert.fail("Should have thrown error - program not whitelisted");
+    } catch (err) {
+      // The allowed_program PDA doesn't exist, so it will fail with AccountNotInitialized
+      assert.ok(err.message.includes("AccountNotInitialized") || err.message.includes("Account does not exist"));
     }
   });
 });
