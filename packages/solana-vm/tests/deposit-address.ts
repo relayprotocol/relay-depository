@@ -309,6 +309,62 @@ describe("Deposit Address", () => {
     assert.ok(configAfterReset.owner.equals(owner.publicKey));
   });
 
+  it("Non-owner cannot set depository", async () => {
+    try {
+      await depositAddressProgram.methods
+        .setDepository()
+        .accountsPartial({
+          config: configPDA,
+          owner: fakeOwner.publicKey,
+          relayDepository: relayDepositoryPDA,
+          relayDepositoryProgram: relayDepositoryProgram.programId,
+          vault: vaultPDA,
+        })
+        .signers([fakeOwner])
+        .rpc();
+      assert.fail("Should have thrown error");
+    } catch (err) {
+      assert.include(err.message, "Unauthorized");
+    }
+  });
+
+  it("Owner can set depository", async () => {
+    // Read current config
+    const configBefore = await depositAddressProgram.account.depositAddressConfig.fetch(
+      configPDA
+    );
+
+    // Set depository (same values - just testing the instruction works)
+    const tx = await depositAddressProgram.methods
+      .setDepository()
+      .accountsPartial({
+        config: configPDA,
+        owner: owner.publicKey,
+        relayDepository: relayDepositoryPDA,
+        relayDepositoryProgram: relayDepositoryProgram.programId,
+        vault: vaultPDA,
+      })
+      .signers([owner])
+      .rpc();
+
+    // Verify config unchanged (same values)
+    const configAfter = await depositAddressProgram.account.depositAddressConfig.fetch(
+      configPDA
+    );
+    assert.ok(configAfter.relayDepository.equals(relayDepositoryPDA));
+    assert.ok(configAfter.relayDepositoryProgram.equals(relayDepositoryProgram.programId));
+    assert.ok(configAfter.vault.equals(vaultPDA));
+
+    // Verify SetDepositoryEvent
+    const events = await getEvents(tx);
+    const event = events.find((e) => e.name === "setDepositoryEvent");
+    assert.exists(event);
+    assert.equal(event?.data.previousRelayDepository.toBase58(), configBefore.relayDepository.toBase58());
+    assert.equal(event?.data.newRelayDepository.toBase58(), relayDepositoryPDA.toBase58());
+    assert.equal(event?.data.previousVault.toBase58(), configBefore.vault.toBase58());
+    assert.equal(event?.data.newVault.toBase58(), vaultPDA.toBase58());
+  });
+
   it("Owner can add program to whitelist", async () => {
     const [allowedProgramPDA] = getAllowedProgramPDA(SystemProgram.programId);
 

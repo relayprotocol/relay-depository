@@ -100,6 +100,45 @@ pub mod deposit_address {
         Ok(())
     }
 
+    /// Update the relay depository configuration
+    ///
+    /// Allows the current owner to update the relay depository, its program ID,
+    /// and the vault address.
+    ///
+    /// # Parameters
+    /// * `ctx` - The context containing the accounts
+    ///
+    /// # Returns
+    /// * `Ok(())` on success
+    /// * `Err(error)` if not authorized
+    pub fn set_depository(ctx: Context<SetDepository>) -> Result<()> {
+        let config = &mut ctx.accounts.config;
+        require_keys_eq!(
+            ctx.accounts.owner.key(),
+            config.owner,
+            DepositAddressError::Unauthorized
+        );
+
+        let previous_relay_depository = config.relay_depository;
+        let previous_relay_depository_program = config.relay_depository_program;
+        let previous_vault = config.vault;
+
+        config.relay_depository = ctx.accounts.relay_depository.key();
+        config.relay_depository_program = ctx.accounts.relay_depository_program.key();
+        config.vault = ctx.accounts.vault.key();
+
+        emit!(SetDepositoryEvent {
+            previous_relay_depository,
+            previous_relay_depository_program,
+            previous_vault,
+            new_relay_depository: config.relay_depository,
+            new_relay_depository_program: config.relay_depository_program,
+            new_vault: config.vault,
+        });
+
+        Ok(())
+    }
+
     /// Add a program to the whitelist
     ///
     /// Allows the owner to add a program to the execute whitelist.
@@ -421,6 +460,30 @@ pub struct SetOwner<'info> {
     pub owner: Signer<'info>,
 }
 
+/// Accounts required for updating the relay depository configuration
+#[derive(Accounts)]
+pub struct SetDepository<'info> {
+    /// The configuration account to update
+    #[account(
+        mut,
+        seeds = [CONFIG_SEED],
+        bump
+    )]
+    pub config: Account<'info, DepositAddressConfig>,
+
+    /// The current owner of the deposit address program
+    pub owner: Signer<'info>,
+
+    /// CHECK: Stored in config, validated during sweep via has_one
+    pub relay_depository: UncheckedAccount<'info>,
+
+    /// The relay depository program
+    pub relay_depository_program: Program<'info, RelayDepository>,
+
+    /// CHECK: Stored in config, validated during sweep via has_one
+    pub vault: UncheckedAccount<'info>,
+}
+
 /// Accounts required for adding a program to the whitelist
 #[derive(Accounts)]
 pub struct AddAllowedProgram<'info> {
@@ -666,6 +729,23 @@ pub struct SetOwnerEvent {
     pub previous_owner: Pubkey,
     /// The new owner
     pub new_owner: Pubkey,
+}
+
+/// Event emitted when the relay depository configuration is updated
+#[event]
+pub struct SetDepositoryEvent {
+    /// The previous relay depository address
+    pub previous_relay_depository: Pubkey,
+    /// The previous relay depository program ID
+    pub previous_relay_depository_program: Pubkey,
+    /// The previous vault address
+    pub previous_vault: Pubkey,
+    /// The new relay depository address
+    pub new_relay_depository: Pubkey,
+    /// The new relay depository program ID
+    pub new_relay_depository_program: Pubkey,
+    /// The new vault address
+    pub new_vault: Pubkey,
 }
 
 /// Event emitted when a program is added to the whitelist
