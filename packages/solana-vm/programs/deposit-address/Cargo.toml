@@ -1,0 +1,23 @@
+[package]
+name = "deposit-address"
+version = "0.1.0"
+description = "Deposit address program for non-custodial deposits"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "deposit_address"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = "0.30.1"
+anchor-spl = "0.30.1"
+solana-program = "1.16"
+relay-depository = { path = "../relay-depository", features = ["cpi"] }
