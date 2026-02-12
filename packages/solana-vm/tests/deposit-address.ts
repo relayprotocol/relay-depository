@@ -544,7 +544,7 @@ describe("Deposit Address", () => {
 
     // Sweep native SOL
     const sweepTx = await depositAddressProgram.methods
-      .sweepNative(id)
+      .sweep(id, PublicKey.default)
       .accountsPartial({
         config: configPDA,
         depositor: depositor.publicKey,
@@ -553,6 +553,11 @@ describe("Deposit Address", () => {
         vault: vaultPDA,
         relayDepositoryProgram: relayDepositoryProgram.programId,
         systemProgram: SystemProgram.programId,
+        mintAccount: null,
+        depositAddressTokenAccount: null,
+        vaultTokenAccount: null,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       })
       .rpc();
 
@@ -578,11 +583,12 @@ describe("Deposit Address", () => {
     assert.equal(depositEvent?.data.id.toString(), id.toString());
 
     // Verify SweepNativeEvent (from deposit-address)
-    const sweepEvent = events.find((e) => e.name === "sweepNativeEvent");
+    const sweepEvent = events.find((e) => e.name === "sweepEvent");
     assert.exists(sweepEvent);
     assert.equal(sweepEvent?.data.amount.toNumber(), depositAmount);
     assert.equal(sweepEvent?.data.depositor.toBase58(), depositor.publicKey.toBase58());
     assert.equal(sweepEvent?.data.depositAddress.toBase58(), depositAddress.toBase58());
+    assert.equal(sweepEvent?.data.mint.toBase58(), PublicKey.default.toBase58());
     assert.equal(sweepEvent?.data.id.toString(), id.toString());
   });
 
@@ -594,7 +600,7 @@ describe("Deposit Address", () => {
 
     try {
       await depositAddressProgram.methods
-        .sweepNative(id)
+        .sweep(id, PublicKey.default)
         .accountsPartial({
           config: configPDA,
           depositor: depositor.publicKey,
@@ -603,6 +609,11 @@ describe("Deposit Address", () => {
           vault: vaultPDA,
           relayDepositoryProgram: relayDepositoryProgram.programId,
           systemProgram: SystemProgram.programId,
+          mintAccount: null,
+          depositAddressTokenAccount: null,
+          vaultTokenAccount: null,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         })
         .rpc();
       assert.fail("Should have thrown error");
@@ -704,12 +715,12 @@ describe("Deposit Address", () => {
 
     // Sweep token (depositor receives ATA rent)
     const sweepTx = await depositAddressProgram.methods
-      .sweepToken(id)
+      .sweep(id, mint)
       .accountsPartial({
         config: configPDA,
         depositor: depositor.publicKey,
         depositAddress,
-        mint,
+        mintAccount: mint,
         depositAddressTokenAccount,
         relayDepository: relayDepositoryPDA,
         vault: vaultPDA,
@@ -754,7 +765,7 @@ describe("Deposit Address", () => {
     assert.equal(depositEvent?.data.token.toBase58(), mint.toBase58());
 
     // Verify SweepTokenEvent (from deposit-address)
-    const sweepEvent = events.find((e) => e.name === "sweepTokenEvent");
+    const sweepEvent = events.find((e) => e.name === "sweepEvent");
     assert.exists(sweepEvent);
     assert.equal(sweepEvent?.data.amount.toNumber(), depositAmount);
     assert.equal(sweepEvent?.data.depositor.toBase58(), depositor.publicKey.toBase58());
@@ -850,12 +861,12 @@ describe("Deposit Address", () => {
 
     // Sweep token2022
     const sweepTx = await depositAddressProgram.methods
-      .sweepToken(id)
+      .sweep(id, mint2022)
       .accountsPartial({
         config: configPDA,
         depositor: depositor.publicKey,
         depositAddress,
-        mint: mint2022,
+        mintAccount: mint2022,
         depositAddressTokenAccount,
         relayDepository: relayDepositoryPDA,
         vault: vaultPDA,
@@ -881,7 +892,7 @@ describe("Deposit Address", () => {
     assert.equal(depositEvent?.data.token.toBase58(), mint2022.toBase58());
 
     // Verify SweepTokenEvent (from deposit-address)
-    const sweepEvent = events.find((e) => e.name === "sweepTokenEvent");
+    const sweepEvent = events.find((e) => e.name === "sweepEvent");
     assert.exists(sweepEvent);
     assert.equal(sweepEvent?.data.amount.toNumber(), depositAmount);
     assert.equal(sweepEvent?.data.mint.toBase58(), mint2022.toBase58());
@@ -912,12 +923,12 @@ describe("Deposit Address", () => {
 
     try {
       await depositAddressProgram.methods
-        .sweepToken(id)
+        .sweep(id, mint)
         .accountsPartial({
           config: configPDA,
           depositor: depositor.publicKey,
           depositAddress,
-          mint,
+          mintAccount: mint,
           depositAddressTokenAccount,
           relayDepository: relayDepositoryPDA,
           vault: vaultPDA,
@@ -977,7 +988,7 @@ describe("Deposit Address", () => {
     // Try to sweep with wrong depositor - should fail PDA verification
     try {
       await depositAddressProgram.methods
-        .sweepNative(id)
+        .sweep(id, PublicKey.default)
         .accountsPartial({
           config: configPDA,
           depositor: wrongDepositor.publicKey,
@@ -986,6 +997,11 @@ describe("Deposit Address", () => {
           vault: vaultPDA,
           relayDepositoryProgram: relayDepositoryProgram.programId,
           systemProgram: SystemProgram.programId,
+          mintAccount: null,
+          depositAddressTokenAccount: null,
+          vaultTokenAccount: null,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         })
         .rpc();
       assert.fail("Should have thrown error");
@@ -1055,12 +1071,12 @@ describe("Deposit Address", () => {
     // Try to sweep with wrong depositor - should fail PDA verification
     try {
       await depositAddressProgram.methods
-        .sweepToken(id)
+        .sweep(id, mint)
         .accountsPartial({
           config: configPDA,
           depositor: wrongDepositor.publicKey,
           depositAddress, // This PDA was derived with correct depositor
-          mint,
+          mintAccount: mint,
           depositAddressTokenAccount,
           relayDepository: relayDepositoryPDA,
           vault: vaultPDA,
@@ -1517,5 +1533,295 @@ describe("Deposit Address", () => {
       // The allowed_program PDA doesn't exist, so it will fail with AccountNotInitialized
       assert.ok(err.message.includes("AccountNotInitialized") || err.message.includes("Account does not exist"));
     }
+  });
+
+  it("Token sweep without optional accounts fails (MissingTokenAccounts)", async () => {
+    const id = Array.from(Keypair.generate().publicKey.toBytes());
+    const [depositAddress] = getDepositAddress(id, mint);
+
+    // Create and fund the deposit address token account
+    const depositAddressTokenAccount = await getAssociatedTokenAddress(
+      mint,
+      depositAddress,
+      true
+    );
+
+    let ownerTokenAccount: PublicKey;
+    try {
+      ownerTokenAccount = await createAssociatedTokenAccount(
+        provider.connection,
+        owner,
+        mint,
+        owner.publicKey
+      );
+    } catch {
+      ownerTokenAccount = await getAssociatedTokenAddress(mint, owner.publicKey);
+    }
+
+    await mintTo(
+      provider.connection,
+      owner,
+      mint,
+      ownerTokenAccount,
+      owner,
+      1_000_000_000
+    );
+
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction()
+        .add(
+          createAssociatedTokenAccountInstruction(
+            owner.publicKey,
+            depositAddressTokenAccount,
+            depositAddress,
+            mint
+          )
+        )
+        .add(
+          createTransferInstruction(
+            ownerTokenAccount,
+            depositAddressTokenAccount,
+            owner.publicKey,
+            1_000_000_000
+          )
+        ),
+      [owner]
+    );
+
+    // Try to sweep token with null optional accounts — should fail
+    try {
+      await depositAddressProgram.methods
+        .sweep(id, mint)
+        .accountsPartial({
+          config: configPDA,
+          depositor: depositor.publicKey,
+          depositAddress,
+          mintAccount: null,
+          depositAddressTokenAccount: null,
+          vaultTokenAccount: null,
+          relayDepository: relayDepositoryPDA,
+          vault: vaultPDA,
+          relayDepositoryProgram: relayDepositoryProgram.programId,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+      assert.fail("Should have thrown error");
+    } catch (err) {
+      assert.include(err.message, "Missing token accounts");
+    }
+  });
+
+  it("Native lifecycle: deposit → sweep → deposit again → sweep again", async () => {
+    const id = Array.from(Keypair.generate().publicKey.toBytes());
+    const [depositAddress] = getDepositAddress(id);
+
+    const depositAmount = 1 * LAMPORTS_PER_SOL;
+
+    // First deposit
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: provider.wallet.publicKey,
+          toPubkey: depositAddress,
+          lamports: depositAmount,
+        })
+      )
+    );
+
+    const vaultBalanceBefore = await provider.connection.getBalance(vaultPDA);
+
+    // First sweep
+    await depositAddressProgram.methods
+      .sweep(id, PublicKey.default)
+      .accountsPartial({
+        config: configPDA,
+        depositor: depositor.publicKey,
+        depositAddress,
+        relayDepository: relayDepositoryPDA,
+        vault: vaultPDA,
+        relayDepositoryProgram: relayDepositoryProgram.programId,
+        systemProgram: SystemProgram.programId,
+        mintAccount: null,
+        depositAddressTokenAccount: null,
+        vaultTokenAccount: null,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+      })
+      .rpc();
+
+    // Verify PDA is empty
+    assert.equal(await provider.connection.getBalance(depositAddress), 0);
+
+    // Second deposit (PDA was garbage-collected, now receives SOL again)
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: provider.wallet.publicKey,
+          toPubkey: depositAddress,
+          lamports: depositAmount,
+        })
+      )
+    );
+
+    // Second sweep
+    await depositAddressProgram.methods
+      .sweep(id, PublicKey.default)
+      .accountsPartial({
+        config: configPDA,
+        depositor: depositor.publicKey,
+        depositAddress,
+        relayDepository: relayDepositoryPDA,
+        vault: vaultPDA,
+        relayDepositoryProgram: relayDepositoryProgram.programId,
+        systemProgram: SystemProgram.programId,
+        mintAccount: null,
+        depositAddressTokenAccount: null,
+        vaultTokenAccount: null,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+      })
+      .rpc();
+
+    // Verify vault received both deposits
+    const vaultBalanceAfter = await provider.connection.getBalance(vaultPDA);
+    assert.equal(vaultBalanceAfter - vaultBalanceBefore, depositAmount * 2);
+    assert.equal(await provider.connection.getBalance(depositAddress), 0);
+  });
+
+  it("Token lifecycle: deposit → sweep → create ATA → deposit again → sweep again", async () => {
+    const id = Array.from(Keypair.generate().publicKey.toBytes());
+    const [depositAddress] = getDepositAddress(id, mint);
+
+    const depositAmount = 500_000_000;
+
+    // Ensure owner has tokens
+    let ownerTokenAccount: PublicKey;
+    try {
+      ownerTokenAccount = await createAssociatedTokenAccount(
+        provider.connection,
+        owner,
+        mint,
+        owner.publicKey
+      );
+    } catch {
+      ownerTokenAccount = await getAssociatedTokenAddress(mint, owner.publicKey);
+    }
+
+    await mintTo(
+      provider.connection,
+      owner,
+      mint,
+      ownerTokenAccount,
+      owner,
+      depositAmount * 2
+    );
+
+    // First deposit: create ATA and fund
+    const depositAddressTokenAccount = await getAssociatedTokenAddress(
+      mint,
+      depositAddress,
+      true
+    );
+
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction()
+        .add(
+          createAssociatedTokenAccountInstruction(
+            owner.publicKey,
+            depositAddressTokenAccount,
+            depositAddress,
+            mint
+          )
+        )
+        .add(
+          createTransferInstruction(
+            ownerTokenAccount,
+            depositAddressTokenAccount,
+            owner.publicKey,
+            depositAmount
+          )
+        ),
+      [owner]
+    );
+
+    const vaultBalanceBefore = await provider.connection
+      .getTokenAccountBalance(vaultTokenAccount)
+      .then((res) => Number(res.value.amount));
+
+    // First sweep (closes ATA)
+    await depositAddressProgram.methods
+      .sweep(id, mint)
+      .accountsPartial({
+        config: configPDA,
+        depositor: depositor.publicKey,
+        depositAddress,
+        mintAccount: mint,
+        depositAddressTokenAccount,
+        relayDepository: relayDepositoryPDA,
+        vault: vaultPDA,
+        vaultTokenAccount,
+        relayDepositoryProgram: relayDepositoryProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Verify ATA was closed
+    try {
+      await getAccount(provider.connection, depositAddressTokenAccount);
+      assert.fail("Token account should have been closed");
+    } catch {
+      // expected
+    }
+
+    // Second deposit: re-create ATA and fund again
+    await provider.sendAndConfirm(
+      new anchor.web3.Transaction()
+        .add(
+          createAssociatedTokenAccountInstruction(
+            owner.publicKey,
+            depositAddressTokenAccount,
+            depositAddress,
+            mint
+          )
+        )
+        .add(
+          createTransferInstruction(
+            ownerTokenAccount,
+            depositAddressTokenAccount,
+            owner.publicKey,
+            depositAmount
+          )
+        ),
+      [owner]
+    );
+
+    // Second sweep
+    await depositAddressProgram.methods
+      .sweep(id, mint)
+      .accountsPartial({
+        config: configPDA,
+        depositor: depositor.publicKey,
+        depositAddress,
+        mintAccount: mint,
+        depositAddressTokenAccount,
+        relayDepository: relayDepositoryPDA,
+        vault: vaultPDA,
+        vaultTokenAccount,
+        relayDepositoryProgram: relayDepositoryProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Verify vault received both deposits
+    const vaultBalanceAfter = await provider.connection
+      .getTokenAccountBalance(vaultTokenAccount)
+      .then((res) => Number(res.value.amount));
+    assert.equal(vaultBalanceAfter - vaultBalanceBefore, depositAmount * 2);
   });
 });

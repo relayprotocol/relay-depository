@@ -249,13 +249,13 @@ describe("Relay Depository", () => {
     return events;
   };
 
-  it("Initialize with none-owner should fail", async () => {
+  it("Initialize with none-owner should fail", async function () {
     // Check if already initialized (e.g., by deposit-address tests running first)
     const accountInfo = await provider.connection.getAccountInfo(relayDepositoryPDA);
     if (accountInfo !== null) {
       // Already initialized, skip this test
       console.log("    (skipped - relay_depository already initialized by another test)");
-      return;
+      this.skip();
     }
 
     try {
@@ -277,7 +277,7 @@ describe("Relay Depository", () => {
     }
   });
 
-  it("Should successfully initialize with correct owner", async () => {
+  it("Should successfully initialize with correct owner", async function () {
     // Check if already initialized (e.g., by deposit-address tests running first)
     const accountInfo = await provider.connection.getAccountInfo(relayDepositoryPDA);
     if (accountInfo !== null) {
@@ -288,7 +288,7 @@ describe("Relay Depository", () => {
       );
       assert.ok(relayDepositoryAccount.owner.equals(owner.publicKey));
       assert.equal(relayDepositoryAccount.vaultBump, vaultBump);
-      return;
+      this.skip();
     }
 
     await program.methods
