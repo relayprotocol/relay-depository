@@ -1,6 +1,6 @@
 # Relay Depository
 
-**Warning: this repository has been archived and its cintent has been merged in [https://github.com/relayprotocol/settlement-protocol](settlement-protocol)**
+**Warning: this repository has been archived and its cintent has been merged in [settlement-protocol](https://github.com/relayprotocol/settlement-protocol)**
 
 ## Overview
 
