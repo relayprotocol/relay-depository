@@ -1,5 +1,7 @@
 # Relay Depository
 
+**Warning: this repository has been archived and its cintent has been merged in [https://github.com/relayprotocol/settlement-protocol](settlement-protocol)**
+
 ## Overview
 
 The Relay Depository is a cross-chain protocol that securely manages user deposits and enables controlled withdrawals through a trusted allocator mechanism. It acts as a financial coordination layer across multiple blockchain environments, with implementations for Ethereum Virtual Machine (EVM) chains, Solana, and in development for Sui and TON.
