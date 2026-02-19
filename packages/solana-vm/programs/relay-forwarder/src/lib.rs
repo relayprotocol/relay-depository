@@ -15,7 +15,7 @@ const RELAY_FORWARDER_SEED: &[u8] = b"relay_forwarder";
 // Program ID
 //----------------------------------------
 
-declare_id!("DPArtTLbEqa6EuXHfL5UFLBZhFjiEXWRudhvXDrjwXUr");
+declare_id!("G67218pYuajgSWAFa5qDgxFJDAc41NTbLfLEz46WQ9M6");
 
 //----------------------------------------
 // Program Module
