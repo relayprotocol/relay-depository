@@ -18,11 +18,13 @@ Warning! For deterministic deployment make sure you're on commit `490858d742d108
 
 The contracts deployment script is available in `./script/RelayDepositoryDeployer.s.sol`. It requires the following environment variables:
 
-- `DEPLOYER_PK`: the private key of the deployer wallet
+- `DEPLOYER_PK`: the private key of the deployer wallet (this must be set to `0xf3d63166f0ca56c3c1a3508fce03ff0cf3fb691e`)
 - `CHAIN`: the chain to deploy on (the available options can be found in `./foundry.toml`)
-- `ALLOCATOR`: the address of the allocator
+- `ALLOCATOR`: the address of the allocator (this must be set to `0x51203c6be98052fb6d7fe1333ee6859b90d21cdf`)
 - `CREATE2_FACTORY`: the addres of the `CREATE2` factory to be used for deterministic deployments - the default factory should be deployed at `0x4e59b44847b379578588920ca78fbf26c0b4956c`, in case it's not available on a given chain we should deploy it there or otherwise use a different factory
 - `ETHERSCAN_API_KEY`: the API key needed to verify the contracts on Etherscan-powered explorers
+
+It's important to note that in order to preserve the deterministic address of the depository contract, the constructor arguments must be set to the values that the contract was initially deployed with. This means that the above `DEPLOYER_PK` and `ALLOCATOR` must be strictly set to the values specified above (or otherwise the contract will get deployed to a different address). However, once deployed, these parameters should be updated to reflect the latest available configuration (via the `setAllocator` and then `transferOwnership` methods).
 
 The deployment can be triggered via the following command:
 
