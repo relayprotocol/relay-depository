@@ -354,6 +354,16 @@
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
+    "name": "zorro",
+    "chainId": 4663,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://8crv4vmq6tiu1yqr.blockscout.com",
+    "verificationFlags": "--chain 4663 --verifier blockscout --verifier-url https://8crv4vmq6tiu1yqr.blockscout.com/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
     "name": "mantle",
     "chainId": 5000,
     "compilerVersion": "0.8.28",
