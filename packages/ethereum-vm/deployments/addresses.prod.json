@@ -384,6 +384,14 @@
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
+    "name": "arc",
+    "chainId": 5042,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
     "name": "superseed",
     "chainId": 5330,
     "compilerVersion": "0.8.28",
