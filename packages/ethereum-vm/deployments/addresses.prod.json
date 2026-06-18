@@ -150,26 +150,6 @@
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
-    "name": "redstone",
-    "chainId": 690,
-    "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
-    "explorerUrl": "https://explorer.redstone.xyz",
-    "verificationFlags": "--chain 690 --verifier blockscout --verifier-url https://explorer.redstone.xyz/api",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
-    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
-  },
-  {
-    "name": "eden",
-    "chainId": 714,
-    "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
-    "explorerUrl": "https://eden.blockscout.com",
-    "verificationFlags": "--chain 714 --verifier blockscout --verifier-url https://eden.blockscout.com/api",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
-    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
-  },
-  {
     "name": "flow",
     "chainId": 747,
     "compilerVersion": "0.8.28",
@@ -238,16 +218,6 @@
     "evmVersion": "cancun",
     "explorerUrl": "https://seitrace.com",
     "verificationFlags": "--chain 1329 --verifier blockscout --verifier-url https://seitrace.com/pacific-1/api",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
-    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
-  },
-  {
-    "name": "perennial",
-    "chainId": 1424,
-    "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
-    "explorerUrl": "https://explorer.perennial.foundation",
-    "verificationFlags": "--chain 1424 --verifier blockscout --verifier-url https://explorer.perennial.foundation/api",
     "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
