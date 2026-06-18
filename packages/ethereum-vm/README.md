@@ -14,13 +14,17 @@ $ forge test
 
 ### Deployment
 
+Warning! For deterministic deployment make sure you're on commit `490858d742d1083bc4e3c2884798f6491dc72abb`.
+
 The contracts deployment script is available in `./script/RelayDepositoryDeployer.s.sol`. It requires the following environment variables:
 
-- `DEPLOYER_PK`: the private key of the deployer wallet
+- `DEPLOYER_PK`: the private key of the deployer wallet (this must be set to `0xf3d63166f0ca56c3c1a3508fce03ff0cf3fb691e`)
 - `CHAIN`: the chain to deploy on (the available options can be found in `./foundry.toml`)
-- `ALLOCATOR`: the address of the allocator
+- `ALLOCATOR`: the address of the allocator (this must be set to `0x51203c6be98052fb6d7fe1333ee6859b90d21cdf`)
 - `CREATE2_FACTORY`: the addres of the `CREATE2` factory to be used for deterministic deployments - the default factory should be deployed at `0x4e59b44847b379578588920ca78fbf26c0b4956c`, in case it's not available on a given chain we should deploy it there or otherwise use a different factory
 - `ETHERSCAN_API_KEY`: the API key needed to verify the contracts on Etherscan-powered explorers
+
+It's important to note that in order to preserve the deterministic address of the depository contract, the constructor arguments must be set to the values that the contract was initially deployed with. This means that the above `DEPLOYER_PK` and `ALLOCATOR` must be strictly set to the values specified above (or otherwise the contract will get deployed to a different address). However, once deployed, these parameters should be updated to reflect the latest available configuration (via the `setAllocator` and then `transferOwnership` methods).
 
 The deployment can be triggered via the following command:
 
@@ -36,7 +40,7 @@ forge script ./script/RelayDepositoryDeployer.s.sol:RelayDepositoryDeployer \
 
 Do not forget to add the corresponding deployment information to the `./deployments/addresses.json` file! Also, please ensure all deployed contracts are verified!
 
-### Verification
+### Contract source code verification
 
 The above script should do the deployment and verification altogether. However, in cases when the verification failed for some reason, it can be triggered individually via the following commands:
 
@@ -45,3 +49,7 @@ forge verify-contract --chain $CHAIN $RELAY_DEPOSITORY ./src/RelayDepository.sol
 ```
 
 In case `forge` doesn't have any default explorer for a given chain, make sure to pass the following extra arguments to the `forge verify-contract` commands: `--verifier-url $VERIFIER_URL --etherscan-api-key $VERIFIER_API_KEY`.
+
+### Contract logic verification
+
+Since we need to deploy on a lot of chains which have different behaviour (eg. different supported evm version, with some opcodes not being available on some chains), it is important to ensure the logic of the contract works before going live with it on production. To help with that you can use the [`test-deposit-and-withdrawal`](./deployments/scripts/test-deposit-and-withdrawal.js) script which is going to execute a deposit to the depository and then request a withdrawal, ensuring both steps of the process work.

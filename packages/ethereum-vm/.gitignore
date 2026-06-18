@@ -1,6 +1,7 @@
 # Compiler files
 cache/
 out/
+build/
 
 # Broadcast logs
 broadcast
@@ -10,3 +11,9 @@ docs/
 
 # Dotenv file
 .env
+
+# Dependencies
+node_modules/
+
+# Error files
+yarn-error.log

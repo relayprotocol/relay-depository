@@ -9,11 +9,15 @@ url = "https://api.apr.dev"
 cluster = "Localnet"
 wallet = "~/.config/solana/id.json"
 
+[programs.mainnet]
+relay_depository = "99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2"
+relay_forwarder = "DPArtTLbEqa6EuXHfL5UFLBZhFjiEXWRudhvXDrjwXUr"
+
 [programs.localnet]
-relay_escrow = "H7BhnmRd2wjuifbDRzjVMNZoXM7Y1qXh2cRAD24tQFr"
-relay_forwarder = "FEdx57eQ7pATqyPNZnW3EWBdhvfapXBz4WMo2Qk5Cm6h"
+relay_depository = "5CdJurnC4uskc9fyUqPmsWZJcwc7XzyLrEWRanUtDYJT"
+relay_forwarder = "Brjhojay2oUjBrrqmE2GmUKEutbeDzDztQQsB9T3FsUj"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
 test-forwarder = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/relay-forwarder.ts"
-test-escrow = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/relay-escrow.ts"
+test-depository = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/relay-depository.ts"

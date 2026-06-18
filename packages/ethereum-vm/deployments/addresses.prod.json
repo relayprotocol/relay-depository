@@ -23,10 +23,10 @@
     "name": "cronos",
     "chainId": 25,
     "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
+    "evmVersion": "london",
     "explorerUrl": "https://cronoscan.com/",
     "verificationFlags": "--chain 25",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
@@ -50,22 +50,22 @@
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
-    "name": "polygon",
-    "chainId": 137,
-    "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
-    "explorerUrl": "https://polygonscan.com/",
-    "verificationFlags": "--chain 137",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
-    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
-  },
-  {
     "name": "unichain",
     "chainId": 130,
     "compilerVersion": "0.8.28",
     "evmVersion": "cancun",
     "explorerUrl": "https://uniscan.xyz",
     "verificationFlags": "--chain 130",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "polygon",
+    "chainId": 137,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://polygonscan.com/",
+    "verificationFlags": "--chain 137",
     "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
@@ -160,6 +160,16 @@
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
+    "name": "stable",
+    "chainId": 988,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://stablescan.xyz",
+    "verificationFlags": "--chain 988 --verifier etherscan",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
     "name": "hyperevm",
     "chainId": 999,
     "compilerVersion": "0.8.28",
@@ -174,21 +184,21 @@
     "name": "metis",
     "chainId": 1088,
     "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
+    "evmVersion": "london",
     "explorerUrl": "https://explorer.metis.io",
     "verificationFlags": "--chain 1088 --verifier blockscout --verifier-url https://api.routescan.io/v2/network/mainnet/evm/1088/etherscan/api",
     "additionalNotes": "Requires using the --legacy flag since the chain is not EIP1559-compatible",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
     "name": "polygon_zkevm",
     "chainId": 1101,
     "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
+    "evmVersion": "london",
     "explorerUrl": "https://zkevm.polygonscan.com",
     "verificationFlags": "--chain 1101",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
@@ -274,16 +284,6 @@
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
-    "name": "game7",
-    "chainId": 2187,
-    "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
-    "explorerUrl": "https://mainnet.game7.io",
-    "verificationFlags": "--chain 2187 --verifier blockscout --verifier-url https://mainnet.game7.io/api",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
-    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
-  },
-  {
     "name": "abstract",
     "chainId": 2741,
     "compilerVersion": "0.8.28",
@@ -307,9 +307,29 @@
     "name": "hychain",
     "chainId": 2911,
     "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
+    "evmVersion": "london",
     "explorerUrl": "https://explorer.hychain.com",
     "verificationFlags": "--chain 2911 --verifier blockscout --verifier-url https://explorer.hychain.com/api",
+    "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "tempo",
+    "chainId": 4217,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explore.tempo.xyz",
+    "verificationFlags": "--chain 4217",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "zorro",
+    "chainId": 4663,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://8crv4vmq6tiu1yqr.blockscout.com",
+    "verificationFlags": "--chain 4663 --verifier blockscout --verifier-url https://8crv4vmq6tiu1yqr.blockscout.com/api",
     "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
@@ -317,19 +337,27 @@
     "name": "mantle",
     "chainId": 5000,
     "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
+    "evmVersion": "london",
     "explorerUrl": "https://explorer.mantle.xyz",
     "verificationFlags": "--chain 5000 --verifier blockscout --verifier-url https://explorer.mantle.xyz/api",
+    "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "somnia",
+    "chainId": 5031,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.somnia.network",
+    "verificationFlags": "--chain 5031 --verifier blockscout --verifier-url https://explorer.somnia.network/api",
     "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
-    "name": "ham",
-    "chainId": 5112,
+    "name": "arc",
+    "chainId": 5042,
     "compilerVersion": "0.8.28",
     "evmVersion": "cancun",
-    "explorerUrl": "https://explorer.ham.fun",
-    "verificationFlags": "--chain 5112 --verifier blockscout --verifier-url https://explorer.ham.fun/api",
     "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
@@ -390,6 +418,16 @@
     "evmVersion": "cancun",
     "explorerUrl": "https://basescan.org",
     "verificationFlags": "--chain 8453",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "plasma",
+    "chainId": 9745,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://plasmascan.to",
+    "verificationFlags": "--chain 9745 --verifier blockscout --verifier-url https://plasmascan.to/api",
     "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
@@ -529,8 +567,9 @@
     "chainId": 59144,
     "compilerVersion": "0.8.28",
     "evmVersion": "london",
-    "additionalNotes": "When deploying / compiling, make sure to use the non-tstore version of the script / contracts (RelayRouter_NonTstore)",
     "explorerUrl": "https://lineascan.build",
+    "verificationFlags": "--chain 59144",
+    "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
@@ -609,9 +648,19 @@
     "name": "taiko",
     "chainId": 167000,
     "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
+    "evmVersion": "london",
     "explorerUrl": "https://taikoscan.io",
     "verificationFlags": "--chain 167000",
+    "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "syndicate",
+    "chainId": 510003,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://commons.explorer.syndicate.io",
+    "verificationFlags": "--chain 510003 --verifier blockscout --verifier-url https://commons.explorer.syndicate.io/api",
     "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
@@ -630,8 +679,10 @@
     "chainId": 543210,
     "compilerVersion": "0.8.28",
     "evmVersion": "london",
-    "additionalNotes": "When deploying / compiling, make sure to use the non-tstore version of the contracts (RelayRouter_NonTstore) - this chain also requires direct deployment via `forge create`",
-    "explorerUrl": "https://explorer.zero.network"
+    "additionalNotes": "Requires direct deployment via `forge create`",
+    "explorerUrl": "https://explorer.zero.network",
+    "verificationFlags": "--chain 543210 --verifier blockscout --verifier-url https://explorer.zero.network/api",
+    "relayDepository": "0xa88cf7864951147a08707ed732237eaa9b1c3b9b"
   },
   {
     "name": "xai",
@@ -640,6 +691,16 @@
     "evmVersion": "cancun",
     "explorerUrl": "https://xaiscan.io",
     "verificationFlags": "--chain 660279",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "gensyn",
+    "chainId": 685689,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://gensyn-mainnet.explorer.alchemy.com",
+    "verificationFlags": "--chain 685689 --verifier blockscout --verifier-url https://gensyn-mainnet.explorer.alchemy.com/api/",
     "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
@@ -660,6 +721,16 @@
     "evmVersion": "cancun",
     "explorerUrl": "https://explorer.forma.art",
     "verificationFlags": "--chain 984122 --verifier blockscout --verifier-url https://explorer.forma.art/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "ethereal",
+    "chainId": 5064014,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://explorer.forma.art",
+    "verificationFlags": "--chain 5064014 --verifier blockscout --verifier-url https://explorer.ethereal.trade/api",
     "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
@@ -700,6 +771,16 @@
     "evmVersion": "cancun",
     "explorerUrl": "https://explorer.degen.tips",
     "verificationFlags": "--chain 666666666 --verifier blockscout --verifier-url https://explorer.degen.tips/api",
+    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
+    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+  },
+  {
+    "name": "metacade",
+    "chainId": 845300014,
+    "compilerVersion": "0.8.28",
+    "evmVersion": "cancun",
+    "explorerUrl": "https://metacade-explorer.appchain.base.org",
+    "verificationFlags": "--chain 845300014 --verifier blockscout --verifier-url https://metacade-explorer.appchain.base.org/api",
     "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },

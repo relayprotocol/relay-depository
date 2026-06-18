@@ -10,7 +10,7 @@ contract RelayDepositoryDeployer is Script {
     error IncorrectContractAddress(address predicted, address actual);
 
     // Modify for vanity address generation
-    bytes32 public SALT = bytes32(uint256(1));
+    bytes32 public constant SALT = bytes32(uint256(1));
 
     function setUp() public {}
 
