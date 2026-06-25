@@ -253,17 +253,6 @@
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
-    "name": "swellchain",
-    "chainId": 1923,
-    "compilerVersion": "0.8.28",
-    "evmVersion": "cancun",
-    "additionalNotes": "Verification failed due to unknown reason",
-    "explorerUrl": "https://swellchainscan.io",
-    "verificationFlags": "--chain 1923",
-    "relayDepository": "0x4cd00e387622c35bddb9b4c962c136462338bc31",
-    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
-  },
-  {
     "name": "sanko",
     "chainId": 1996,
     "compilerVersion": "0.8.28",
