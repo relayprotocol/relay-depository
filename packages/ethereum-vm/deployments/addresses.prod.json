@@ -645,16 +645,6 @@
     "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
   },
   {
-    "name": "taiko",
-    "chainId": 167000,
-    "compilerVersion": "0.8.28",
-    "evmVersion": "london",
-    "explorerUrl": "https://taikoscan.io",
-    "verificationFlags": "--chain 167000",
-    "relayDepository": "0x59916da825d2d2ec1bf878d71c88826f6633ecca",
-    "create2Factory": "0x4e59b44847b379578588920ca78fbf26c0b4956c"
-  },
-  {
     "name": "syndicate",
     "chainId": 510003,
     "compilerVersion": "0.8.28",
